@@ -27,7 +27,6 @@ try:
     multiplier_spritesheet = pygame.image.load("assets/multiplier.png").convert_alpha()
     player_roll_spritesheet = pygame.image.load("assets/player_roll.png").convert_alpha() 
     obstacle_enemy_img = pygame.image.load("assets/obstacle_enemy.png").convert_alpha()
-    player_attack_spritesheet = pygame.image.load("assets/player_attack.png").convert_alpha()
 except:
     print("Gagal memuat aset.")
     pygame.quit()
@@ -92,19 +91,6 @@ roll_animation_speed = 100
 is_rolling = False
 roll_timer = 0
 roll_duration = 1000  # Durasi roll dalam milidetik
-
-# Animasi serang
-attack_width, attack_height = 768 // 8, 64  # Sesuaikan dengan ukuran frame
-attack_frames = [player_attack_spritesheet.subsurface((i * attack_width, 0, attack_width, attack_height)) for i in range(player_attack_spritesheet.get_width() // attack_width)]
-attack_frame_index = 0
-attack_animation_timer = 0
-attack_animation_speed = 80  # Lebih cepat untuk animasi serang
-is_attacking = False
-attack_timer = 0
-attack_duration = 1000  # Durasi serang dalam milidetik
-attack_cooldown = 0  # Cooldown antara serangan
-last_attack_time = 0
-attack_hitbox = None
 
 # Animasi enemy
 enemy_width, enemy_height = 135 // 4, 64  # Sesuaikan dengan ukuran frame sprite Anda
@@ -241,27 +227,6 @@ def update_player_animation():
             player_animation_timer = 0
             player_frame_index = (player_frame_index + 1) % len(player_frames)
 
-# ataack
-def update_attack_animation():
-    global attack_frame_index, attack_animation_timer, is_attacking, attack_hitbox
-    
-    if is_attacking:
-        attack_animation_timer += dt
-        if attack_animation_timer >= attack_animation_speed:
-            attack_animation_timer = 0
-            attack_frame_index += 1
-            if attack_frame_index >= len(attack_frames):
-                attack_frame_index = 0
-                is_attacking = False
-            else:
-                # Update hitbox serang (sesuaikan dengan frame animasi)
-                attack_hitbox = pygame.Rect(
-                    player_rect.right - 20, 
-                    player_rect.top + 20, 
-                    60, 
-                    player_rect.height - 40
-                )
-
 
 # Game loop
 while running:
@@ -315,18 +280,6 @@ while running:
                     elif dj_active and not has_jumped_once:
                         player_speed_y = jump_power
                         has_jumped_once = True
-                elif event.key == pygame.K_s:  # Tombol serang
-                    current_time = pygame.time.get_ticks()
-                    if current_time - last_attack_time > attack_cooldown:
-                        is_attacking = True
-                        attack_frame_index = 0
-                        last_attack_time = current_time
-                        attack_hitbox = pygame.Rect(
-                            player_rect.right - 20, 
-                            player_rect.top + 20, 
-                            60, 
-                            player_rect.height - 40
-                        )
                 elif event.key == pygame.K_ESCAPE:
                     game_state = MENU
 
@@ -403,15 +356,6 @@ while running:
                 screen.blit(obstacle_arrow_img, o)
             elif o_type == "enemy":
                 screen.blit(enemy_frames[enemy_frame_index], o)
-            
-            update_attack_animation()
-
-            # Cek tabrakan serangan dengan musuh
-            if is_attacking and attack_hitbox:
-                for o, o_type in obstacles[:]:
-                    if o_type == "enemy" and attack_hitbox.colliderect(o):
-                        obstacles.remove((o, o_type))
-                        score += 50  # Bonus skor untuk mengalahkan musuh
 
             # Cek tabrakan
             if player_rect.inflate(-80, -30).colliderect(o):
@@ -535,9 +479,7 @@ while running:
                 screen.blit(t, (WIDTH - 220, 70))
 
         # Gambar pemain
-        if is_attacking:
-            screen.blit(attack_frames[attack_frame_index], player_rect)
-        elif is_rolling:
+        if is_rolling:
             screen.blit(roll_frames[roll_frame_index], player_rect)
         else:
             screen.blit(player_frames[player_frame_index], player_rect)

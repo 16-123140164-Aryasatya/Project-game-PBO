@@ -36,11 +36,18 @@ except:
 # Konstanta dan variabel
 SAVE_FILE = "save_data.json"
 save_data = {"high_score": 0, "total_coin": 0}
-MENU, GAMEPLAY = 0, 1
+MENU, GAMEPLAY, SHOP = 0, 1, 2
 game_state = MENU
 
+# Data upgrade shop
+shop_items = {
+    "shield": {"level": 1, "price": 100, "max_level": 5},
+    "double_jump": {"level": 1, "price": 150, "max_level": 3},
+    "multiplier": {"level": 1, "price": 200, "max_level": 3}
+}
+
 # Posisi tombol
-start_button_rect = start_img.get_rect(center=(WIDTH // 2, 205))
+start_button_rect = start_img.get_rect( center=(WIDTH // 2, 205))
 shop_rect = shop_img.get_rect(center=(WIDTH // 2, 240))
 setting_rect = setting_img.get_rect(center=(WIDTH // 2, 270))
 reset_rect = reset_img.get_rect(center=(WIDTH // 2, 305))
@@ -51,19 +58,76 @@ def load_save():
     if os.path.exists(SAVE_FILE):
         with open(SAVE_FILE, "r") as f:
             save_data = json.load(f)
+            if "shop_items" in save_data:
+                shop_items.update(save_data["shop_items"])
 
 # Fungsi untuk menyimpan data game
 def save_game():
+    save_data["shop_items"] = shop_items
     with open(SAVE_FILE, "w") as f:
         json.dump(save_data, f)
 
 # Fungsi untuk mereset data
 def reset_data():
-    global save_data
+    global save_data, shop_items
     save_data = {"high_score": 0, "total_coin": 0}
+    shop_items = {
+        "shield": {"level": 1, "price": 100, "max_level": 5},
+        "double_jump": {"level": 1, "price": 150, "max_level": 3},
+        "multiplier": {"level": 1, "price": 200, "max_level": 3}
+    }
     save_game()
 
 load_save()
+
+# Fungsi shop
+def draw_shop():
+    screen.blit(bg_img, (0, 0))
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 180))
+    screen.blit(overlay, (0, 0))
+    
+    # Tampilkan koin di atas (sejajar dengan menu lain)
+    coins_text = font.render(f"Coins: {save_data['total_coin']}", True, (255, 255, 0))
+    screen.blit(coins_text, (WIDTH - 150, 20))
+    
+    title = font.render("SHOP", True, (255, 255, 255))
+    screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
+    
+    back_btn = pygame.Rect(20, 20, 80, 40)
+    pygame.draw.rect(screen, (200, 50, 50), back_btn)
+    screen.blit(font.render("Back", True, (255, 255, 255)), (back_btn.x + 20, back_btn.y + 10))
+    
+    buttons = []  # Untuk menyimpan rect semua tombol buy
+    
+    y_pos = 100
+    for item, data in shop_items.items():
+        # Gambar item
+        if item == "shield":
+            img = shield_frames[0]
+        elif item == "double_jump":
+            img = dj_frames[0]
+        else:
+            img = multiplier_frames[0]
+        
+        img = pygame.transform.scale(img, (50, 50))
+        screen.blit(img, (50, y_pos))
+        
+        # Info item
+        screen.blit(font.render(f"{item.replace('_', ' ').title()}", True, (255, 255, 255)), (120, y_pos))
+        screen.blit(font.render(f"Lvl: {data['level']}/{data['max_level']}", True, (200, 200, 200)), (120, y_pos + 25))
+        
+        # Tombol buy
+        if data['level'] < data['max_level']:
+            btn_rect = pygame.Rect(WIDTH - 150, y_pos + 10, 100, 40)
+            btn_color = (50, 200, 50) if save_data['total_coin'] >= data['price'] else (100, 100, 100)
+            pygame.draw.rect(screen, btn_color, btn_rect)
+            screen.blit(font.render(f"Buy: {data['price']}", True, (255, 255, 255)), (WIDTH - 140, y_pos + 20))
+            buttons.append((item, btn_rect))  # Simpan item dan rect-nya
+        
+        y_pos += 80
+    
+    return back_btn, buttons
 
 # Animasi pemain
 frame_width = 768 // 8
@@ -199,6 +263,18 @@ def reset_game():
     global shields, shield_active, shield_spawn_timer, shield_hits
     global shield_frame_index, shield_animation_timer
     global multipliers, multiplier_active, multiplier_timer, multiplier_value
+    global max_shield_hits, dj_duration  # Tambahkan ini
+
+     # Terapkan upgrade
+    #apply_upgrades()
+
+    #def apply_upgrades():
+     #   global max_shield_hits, dj_duration, multiplier_value
+      #  max_shield_hits = 1 + shop_items["shield"]["level"]
+       # dj_duration = 20000 + (shop_items["double_jump"]["level"] * 10000)
+        #multiplier_value = 1 + (0.5 * shop_items["multiplier"]["level"])
+
+   
 
     player_rect = pygame.Rect(100, HEIGHT - frame_height - 50, frame_width, frame_height)
     player_speed_y = 0
@@ -225,7 +301,18 @@ def reset_game():
     multiplier_active = False
     multiplier_timer = 0
     multiplier_value = 1
-    
+
+    # Apply shop upgrades
+    max_shield_hits = 1 + shop_items["shield"]["level"]  # Shield bisa menerima lebih banyak hit
+    dj_duration = 20000 + (shop_items["double_jump"]["level"] * 10000)  # Durasi double jump lebih lama
+    multiplier_value = 1 + (0.5 * shop_items["multiplier"]["level"])  # Nilai multiplier lebih tinggi
+
+def apply_upgrades():
+        global max_shield_hits, dj_duration, multiplier_value
+        max_shield_hits = 1 + shop_items["shield"]["level"]
+        dj_duration = 20000 + (shop_items["double_jump"]["level"] * 10000)
+        multiplier_value = 1 + (0.5 * shop_items["multiplier"]["level"])
+
 def update_player_animation():
     global player_frame_index, player_animation_timer
     global roll_frame_index, roll_animation_timer, is_rolling
@@ -295,6 +382,7 @@ while running:
                     game_state = GAMEPLAY
                     reset_game()
                 elif shop_rect.collidepoint(mouse_pos):
+                    game_state = SHOP
                     print("Buka Shop")
                 elif setting_rect.collidepoint(mouse_pos):
                     print("Buka Pengaturan")
@@ -302,6 +390,11 @@ while running:
                     reset_data()
                     print("Data direset")
         elif game_state == GAMEPLAY:
+            apply_upgrades()  # Pastikan upgrade selalu diterapkan
+            # Apply real-time upgrades (di awal gameplay loop)
+            shield_spawn_interval = max(3000, 10000 - (shop_items["shield"]["level"] * 1500))  # Shield lebih sering muncul
+            dj_spawn_interval = max(5000, 15000 - (shop_items["double_jump"]["level"] * 3000))  # Double jump lebih sering
+            multiplier_spawn_interval = max(8000, 15000 - (shop_items["multiplier"]["level"] * 2000))  # Multiplier lebih sering
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_DOWN and not is_rolling:  # Jika tombol panah bawah ditekan
                     is_rolling = True
@@ -330,6 +423,29 @@ while running:
                 elif event.key == pygame.K_ESCAPE:
                     game_state = MENU
 
+        elif game_state == SHOP:
+            back_btn, buy_buttons = draw_shop()  # Sekarang mengembalikan dua nilai
+
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mouse_pos = pygame.mouse.get_pos()
+                # back_btn = draw_shop()  # Get button rects
+        
+                if back_btn.collidepoint(mouse_pos):
+                    game_state = MENU
+                else:
+                    for item, btn_rect in buy_buttons:
+                        if btn_rect.collidepoint(mouse_pos):
+                            if save_data['total_coin'] >= shop_items[item]['price']:
+                                save_data['total_coin'] -= shop_items[item]['price']
+                                shop_items[item]['level'] += 1
+                                shop_items[item]['price'] = int(shop_items[item]['price'] * 1.5)  # Harga naik
+                                save_game()
+                                # Feedback visual
+                                pygame.draw.rect(screen, (0, 255, 0), btn_rect)
+                                pygame.display.flip()
+                                pygame.time.delay(100)  # Sedikit delay untuk feedback
+                            break
+
     # Menu
     if game_state == MENU:
         screen.blit(bg_img, (0, 0))
@@ -339,6 +455,10 @@ while running:
         screen.blit(reset_img, reset_rect)
         screen.blit(font.render(f"High Score: {save_data['high_score']}", True, (255, 255, 255)), (10, 10))
         screen.blit(font.render(f"Total Coins: {save_data['total_coin']}", True, (255, 255, 0)), (10, 40))
+
+    # Di dalam game loop utama
+    elif game_state == SHOP:
+        back_btn = draw_shop()
 
     # Gameplay
     elif game_state == GAMEPLAY:
