@@ -425,7 +425,7 @@ class Game:
             self.screen.blit(self.reset_img, self.reset_rect)
             
             self.screen.blit(
-                self.font.render(f"High Score: {self.save_data['high_score']}", True, (255, 255, 255)), 
+                self.font.render(f"High Score: {int(self.save_data['high_score'])}", True, (255, 255, 255)), 
                 (10, 10)
             )
             self.screen.blit(
@@ -452,9 +452,9 @@ class Game:
             
             # Draw UI
             self.screen.blit(
-                self.font.render(f"Score: {self.player.score}", True, (255, 255, 255)), 
-                (10, 10)
-            )
+                self.font.render(f"Score: {int(self.player.score)}", True, (255, 255, 255)), 
+            (10, 10)
+        )
             self.screen.blit(
                 self.font.render(f"Coins: {self.player.coin_score}", True, (255, 255, 0)), 
                 (10, 40)
