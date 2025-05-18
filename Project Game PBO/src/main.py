@@ -6,564 +6,991 @@ import os
 
 pygame.init()
 
-# Set ukuran layar
+# Constants
 WIDTH, HEIGHT = 620, 360
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Endless Run")
-
-# Memuat aset gambar
-try:
-    bg_img = pygame.image.load("assets/menu_start.png").convert()
-    start_img = pygame.image.load("assets/start.png").convert_alpha()
-    shop_img = pygame.image.load("assets/shop.png").convert_alpha()
-    setting_img = pygame.image.load("assets/setting.png").convert_alpha()
-    reset_img = pygame.image.load("assets/reset.png").convert_alpha()
-    spritesheet = pygame.image.load("assets/player.png").convert_alpha()
-    obstacle_img = pygame.image.load("assets/obstacle.png").convert_alpha()
-    obstacle_arrow_img = pygame.image.load("assets/obstacle_arrow.png").convert_alpha()  # Obstacle panah
-    coin_spritesheet = pygame.image.load("assets/coin.png").convert_alpha()
-    double_jump_spritesheet = pygame.image.load("assets/double_jump.png").convert_alpha()
-    shield_spritesheet = pygame.image.load("assets/shield.png").convert_alpha()
-    multiplier_spritesheet = pygame.image.load("assets/multiplier.png").convert_alpha()
-    player_roll_spritesheet = pygame.image.load("assets/player_roll.png").convert_alpha() 
-    obstacle_enemy_img = pygame.image.load("assets/obstacle_enemy.png").convert_alpha()
-    player_attack_spritesheet = pygame.image.load("assets/player_attack.png").convert_alpha()
-except:
-    print("Gagal memuat aset.")
-    pygame.quit()
-    sys.exit()
-
-# Konstanta dan variabel
 SAVE_FILE = "save_data.json"
-save_data = {"high_score": 0, "total_coin": 0}
-MENU, GAMEPLAY = 0, 1
-game_state = MENU
-
-# Posisi tombol
-start_button_rect = start_img.get_rect(center=(WIDTH // 2, 205))
-shop_rect = shop_img.get_rect(center=(WIDTH // 2, 240))
-setting_rect = setting_img.get_rect(center=(WIDTH // 2, 270))
-reset_rect = reset_img.get_rect(center=(WIDTH // 2, 305))
-
-# Fungsi untuk memuat data penyimpanan
-def load_save():
-    global save_data
-    if os.path.exists(SAVE_FILE):
-        with open(SAVE_FILE, "r") as f:
-            save_data = json.load(f)
-
-# Fungsi untuk menyimpan data game
-def save_game():
-    with open(SAVE_FILE, "w") as f:
-        json.dump(save_data, f)
-
-# Fungsi untuk mereset data
-def reset_data():
-    global save_data
-    save_data = {"high_score": 0, "total_coin": 0}
-    save_game()
-
-load_save()
-
-# Animasi pemain
-frame_width = 768 // 8
-frame_height = 64
-player_frames = [spritesheet.subsurface((i * frame_width, 0, frame_width, frame_height)) for i in range(8)]
-player_frame_index = 0
-player_animation_timer = 0
-player_animation_speed = 100
-
-player_rect = pygame.Rect(100, HEIGHT - frame_height - 50, frame_width, frame_height)
-player_speed_y = 0
-gravity = 0.5
-jump_power = -10
-ground_level = HEIGHT - 50
-
-bg_scroll_x = 0
-bg_speed = 2
-
-# Konstanta roll
-roll_width = 768 // 8
-roll_height = 32  # Misalnya, ukuran lebih kecil untuk menggulung
-roll_frames = [player_roll_spritesheet.subsurface((i * roll_width, 0, roll_width, roll_height)) for i in range(8)]
-roll_frame_index = 0
-roll_animation_timer = 0
-roll_animation_speed = 100
-is_rolling = False
-roll_timer = 0
-roll_duration = 1000  # Durasi roll dalam milidetik
-
-# Animasi serang
-attack_width, attack_height = 768 // 8, 64  # Sesuaikan dengan ukuran frame
-attack_frames = [player_attack_spritesheet.subsurface((i * attack_width, 0, attack_width, attack_height)) for i in range(player_attack_spritesheet.get_width() // attack_width)]
-attack_frame_index = 0
-attack_animation_timer = 0
-attack_animation_speed = 80  # Lebih cepat untuk animasi serang
-is_attacking = False
-attack_timer = 0
-attack_duration = 1000  # Durasi serang dalam milidetik
-attack_cooldown = 0  # Cooldown antara serangan
-last_attack_time = 0
-attack_hitbox = None
-
-# Animasi enemy
-enemy_width, enemy_height = 135 // 4, 64  # Sesuaikan dengan ukuran frame sprite Anda
-enemy_frames = [obstacle_enemy_img.subsurface((i * enemy_width, 0, enemy_width, enemy_height)) for i in range(obstacle_enemy_img.get_width() // enemy_width)]
-enemy_frame_index = 0
-enemy_animation_timer = 0
-enemy_animation_speed = 150  # Kecepatan animasi bisa disesuaikan
-
-# Daftar rintangan dan interval spawn
-obstacles = []
-obstacle_spawn_timer = 0
-obstacle_spawn_interval = 1500
-obstacle_speed = 4
-
-# Animasi koin
-coin_width, coin_height = 16, 16
-coin_frames = [coin_spritesheet.subsurface((i * coin_width, 0, coin_width, coin_height)) for i in range(coin_spritesheet.get_width() // coin_width)]
-coin_frame_index = 0
-coin_animation_timer = 0
-coin_animation_speed = 100
-coins = []
-coin_spawn_timer = 0
-coin_spawn_interval = 1500
-coin_score = 0
-
-# Animasi double jump
-dj_width, dj_height = 32, 32
-dj_frames = [double_jump_spritesheet.subsurface((i * dj_width, 0, dj_width, dj_height)) for i in range(4)]
-dj_frame_index = 0
-dj_animation_timer = 0
-dj_animation_speed = 100
-double_jumps = []
-dj_spawn_timer = 0
-dj_spawn_interval = 7000
-dj_duration = 30000
-dj_active = False
-dj_timer = 0
-can_double_jump = False
-has_jumped_once = False
-
-# Animasi shield
-shield_width, shield_height = 32, 32
-shield_frames = [shield_spritesheet.subsurface((i * shield_width, 0, shield_width, shield_height)) for i in range(4)]
-shield_frame_index = 0
-shield_animation_timer = 0
-shield_animation_speed = 100
-shields = []
-shield_spawn_timer = 0
-shield_spawn_interval = 10000
-shield_active = False
-shield_hits = 0
-max_shield_hits = 2
-
-score = 0
-score_timer = 0
-score_interval = 100
-
-font = pygame.font.SysFont(None, 36)
-clock = pygame.time.Clock()
-running = True
+MENU, GAMEPLAY, SHOP, SETTING = 0, 1, 2, 3      
 DEBUG_HITBOX = True
 
-# Animasi multiplier
-multiplier_width, multiplier_height = 32, 32
-multiplier_frames = [multiplier_spritesheet.subsurface((i * multiplier_width, 0, multiplier_width, multiplier_height)) for i in range(4)]
-multiplier_frame_index = 0
-multiplier_animation_timer = 0
-multiplier_animation_speed = 100
-multipliers = []
-multiplier_spawn_timer = 0
-multiplier_spawn_interval = 12000  # Multiplier spawn interval
-multiplier_active = False
-multiplier_duration = 10000
-multiplier_timer = 0
-multiplier_value = 1
+class Game:
+    def __init__(self):
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("Runner Saga")
+        self.clock = pygame.time.Clock()
+        self.font = pygame.font.SysFont(None, 36)
+        self.game_state = MENU
+        self.running = True
+        
+        # Initialize sound system
+        pygame.mixer.init()
+        self.sounds = {}
+        
+        # Settings
+        self.settings = {
+            "music_enabled": True,
+            "sound_effects_enabled": True,
+            "hitbox_visible": DEBUG_HITBOX
+        }
 
-score = 0
-score_timer = 0
-score_interval = 100
+        # Load assets
+        self.load_assets()
+        self.load_sounds()
 
-font = pygame.font.SysFont(None, 36)
-clock = pygame.time.Clock()
-running = True
-DEBUG_HITBOX = True
-
-# Fungsi untuk mereset game
-def reset_game():
-    global player_rect, player_speed_y, obstacles, bg_scroll_x, score
-    global obstacle_spawn_interval, coins, coin_score, coin_spawn_timer
-    global score_timer, double_jumps, dj_active, dj_timer
-    global can_double_jump, has_jumped_once, dj_spawn_timer
-    global shields, shield_active, shield_spawn_timer, shield_hits
-    global shield_frame_index, shield_animation_timer
-    global multipliers, multiplier_active, multiplier_timer, multiplier_value
-
-    player_rect = pygame.Rect(100, HEIGHT - frame_height - 50, frame_width, frame_height)
-    player_speed_y = 0
-    obstacles.clear()
-    coins.clear()
-    double_jumps.clear()
-    shields.clear()
-    bg_scroll_x = 0
-    score = 0
-    coin_score = 0
-    obstacle_spawn_interval = 1500
-    coin_spawn_timer = 0
-    score_timer = 0
-    dj_active = False
-    dj_timer = 0
-    can_double_jump = False
-    has_jumped_once = False
-    dj_spawn_timer = 0
-    shield_active = False
-    shield_spawn_timer = 0
-    shield_hits = 0
-    shield_frame_index = 0
-    shield_animation_timer = 0
-    multiplier_active = False
-    multiplier_timer = 0
-    multiplier_value = 1
+        # Play menu music initially
+        self.play_menu_music()
+        
+        # Initialize game components
+        self.save_data = {"high_score": 0, "total_coin": 0}
+        self.shop_items = {
+            "shield": {"level": 1, "price": 100, "max_level": 5},
+            "double_jump": {"level": 1, "price": 150, "max_level": 3},
+            "multiplier": {"level": 1, "price": 200, "max_level": 3}
+        }
+        
+        # Button positions
+        self.start_button_rect = self.start_img.get_rect(center=(WIDTH // 2, 140))
+        self.shop_rect = self.shop_img.get_rect(center=(WIDTH // 2, 180))
+        self.setting_rect = self.setting_img.get_rect(center=(WIDTH // 2, 220))
+        self.reset_rect = self.reset_img.get_rect(center=(WIDTH // 2, 270))
+        
+        # Load saved data
+        self.load_save()
+        
+        # Initialize player and game objects
+        self.player = Player(self)
+        self.obstacle_manager = ObstacleManager(self)
+        self.coin_manager = CoinManager(self)
+        self.powerup_manager = PowerupManager(self)
     
-def update_player_animation():
-    global player_frame_index, player_animation_timer
-    global roll_frame_index, roll_animation_timer, is_rolling
-
-    if is_rolling:
-        roll_animation_timer += dt
-        if roll_animation_timer >= roll_animation_speed:
-            roll_animation_timer = 0
-            roll_frame_index = (roll_frame_index + 1) % len(roll_frames)
-    else:
-        player_animation_timer += dt
-        if player_animation_timer >= player_animation_speed:
-            player_animation_timer = 0
-            player_frame_index = (player_frame_index + 1) % len(player_frames)
-
-# ataack
-def update_attack_animation():
-    global attack_frame_index, attack_animation_timer, is_attacking, attack_hitbox
-    
-    if is_attacking:
-        attack_animation_timer += dt
-        if attack_animation_timer >= attack_animation_speed:
-            attack_animation_timer = 0
-            attack_frame_index += 1
-            if attack_frame_index >= len(attack_frames):
-                attack_frame_index = 0
-                is_attacking = False
-            else:
-                # Update hitbox serang (sesuaikan dengan frame animasi)
-                attack_hitbox = pygame.Rect(
-                    player_rect.right - 20, 
-                    player_rect.top + 20, 
-                    60, 
-                    player_rect.height - 40
-                )
-
-
-# Game loop
-while running:
-    dt = clock.tick(60)
-    obstacle_spawn_timer += dt
-    coin_spawn_timer += dt
-    player_animation_timer += dt
-    coin_animation_timer += dt
-    score_timer += dt
-    dj_animation_timer += dt
-    shield_animation_timer += dt
-    multiplier_animation_timer += dt
-    enemy_animation_timer += dt
-    if enemy_animation_timer >= enemy_animation_speed:
-        enemy_animation_timer = 0
-        enemy_frame_index = (enemy_frame_index + 1) % len(enemy_frames)
-    if not dj_active:
-        dj_spawn_timer += dt
-    if not shield_active:
-        shield_spawn_timer += dt
-    if not multiplier_active:
-        multiplier_spawn_timer += dt
-
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        if game_state == MENU:
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                mouse_pos = pygame.mouse.get_pos()
-                if start_button_rect.collidepoint(mouse_pos):
-                    game_state = GAMEPLAY
-                    reset_game()
-                elif shop_rect.collidepoint(mouse_pos):
-                    print("Buka Shop")
-                elif setting_rect.collidepoint(mouse_pos):
-                    print("Buka Pengaturan")
-                elif reset_rect.collidepoint(mouse_pos):
-                    reset_data()
-                    print("Data direset")
-        elif game_state == GAMEPLAY:
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_DOWN and not is_rolling:  # Jika tombol panah bawah ditekan
-                    is_rolling = True
-                    roll_timer = pygame.time.get_ticks()
-                    player_speed_y = 0  # Menghentikan gerakan vertikal saat roll
-                    player_rect.height = roll_height  # Mengubah tinggi hitbox untuk menggulung
-                elif event.key == pygame.K_SPACE or event.key == pygame.K_UP:  
-                    if player_rect.bottom >= ground_level:
-                        player_speed_y = jump_power
-                        has_jumped_once = False
-                    elif dj_active and not has_jumped_once:
-                        player_speed_y = jump_power
-                        has_jumped_once = True
-                elif event.key == pygame.K_s:  # Tombol serang
-                    current_time = pygame.time.get_ticks()
-                    if current_time - last_attack_time > attack_cooldown:
-                        is_attacking = True
-                        attack_frame_index = 0
-                        last_attack_time = current_time
-                        attack_hitbox = pygame.Rect(
-                            player_rect.right - 20, 
-                            player_rect.top + 20, 
-                            60, 
-                            player_rect.height - 40
-                        )
-                elif event.key == pygame.K_ESCAPE:
-                    game_state = MENU
-
-    # Menu
-    if game_state == MENU:
-        screen.blit(bg_img, (0, 0))
-        screen.blit(start_img, start_button_rect)
-        screen.blit(shop_img, shop_rect)
-        screen.blit(setting_img, setting_rect)
-        screen.blit(reset_img, reset_rect)
-        screen.blit(font.render(f"High Score: {save_data['high_score']}", True, (255, 255, 255)), (10, 10))
-        screen.blit(font.render(f"Total Coins: {save_data['total_coin']}", True, (255, 255, 0)), (10, 40))
-
-    # Gameplay
-    elif game_state == GAMEPLAY:
-        if score_timer >= score_interval:
-            score_timer = 0
-            score += multiplier_value  # Apply multiplier to score
-
-        # Update posisi pemain
-        player_speed_y += gravity
-        player_rect.y += player_speed_y
-        if player_rect.bottom >= ground_level:
-            player_rect.bottom = ground_level
-            player_speed_y = 0
-            has_jumped_once = False
-
-        if player_animation_timer >= player_animation_speed:
-            player_animation_timer = 0
-            player_frame_index = (player_frame_index + 1) % len(player_frames)
-
-        update_player_animation()  # Tambahkan ini
-
-        # Perbarui logika roll
-        if is_rolling:
-            elapsed_roll_time = pygame.time.get_ticks() - roll_timer
-            if elapsed_roll_time >= roll_duration:  # Setelah roll selesai
-                is_rolling = False
-                player_rect.height = frame_height  # Kembalikan tinggi hitbox ke ukuran normal
-
-        bg_scroll_x = (bg_scroll_x - bg_speed) % WIDTH
-        screen.blit(bg_img, (bg_scroll_x - WIDTH, 0))
-        screen.blit(bg_img, (bg_scroll_x, 0))
-
-        # Rintangan
-        if obstacle_spawn_timer >= obstacle_spawn_interval:
-            if random.random() < 0.5:
-                # Rintangan biasa di tanah
-                rect = obstacle_img.get_rect(bottom=ground_level, left=WIDTH + random.randint(0, 100))
-                obstacles.append((rect, "normal"))
-            elif random.random() < 0.3:
-                # Rintangan panah di udara dengan tinggi random (60 atau 80)
-                arrow_y = ground_level - random.choice([60, 80])  # Pilih antara 60 atau 80
-                rect = obstacle_arrow_img.get_rect(left=WIDTH + random.randint(0, 100), top=arrow_y)
-                obstacles.append((rect, "arrow"))
-            elif random.random() < 0.2:
-                rect = pygame.Rect(WIDTH + random.randint(0, 100), ground_level - enemy_height, enemy_width, enemy_height)
-                obstacles.append((rect, "enemy"))  # Tambahkan tipe "enemy" ke tuple
-
-
-            obstacle_spawn_timer = 0
-            obstacle_spawn_interval = max(800, obstacle_spawn_interval - 10)
-
-        for o, o_type in obstacles[:]:
-            o.x -= obstacle_speed
-            if o.right < 0:
-                obstacles.remove((o, o_type))
-                continue
-
-             # Gambar obstacle sesuai tipe    
-            if o_type == "normal":
-                screen.blit(obstacle_img, o)
-            elif o_type == "arrow":
-                screen.blit(obstacle_arrow_img, o)
-            elif o_type == "enemy":
-                screen.blit(enemy_frames[enemy_frame_index], o)
+    def load_sounds(self):
+        try:
+            # Background music
+            self.sounds['menu_music'] = pygame.mixer.Sound("assets/sound_menu.wav")
+            self.sounds['gameplay_music'] = pygame.mixer.Sound("assets/sound_gameplay.wav")
             
-            update_attack_animation()
+            # Sound effects
+            self.sounds['collectible'] = pygame.mixer.Sound("assets/sound_collectible.wav")
+            
+        
+            # Set volume levels
+            self.sounds['menu_music'].set_volume(0.5)
+            self.sounds['gameplay_music'].set_volume(0.5)
+            self.sounds['collectible'].set_volume(0.7)
+            
+        except Exception as e:
+            print(f"Failed to load sounds: {e}")
 
-            # Cek tabrakan serangan dengan musuh
-            if is_attacking and attack_hitbox:
-                for o, o_type in obstacles[:]:
-                    if o_type == "enemy" and attack_hitbox.colliderect(o):
-                        obstacles.remove((o, o_type))
-                        score += 50  # Bonus skor untuk mengalahkan musuh
+    def play_menu_music(self):
+        pygame.mixer.stop()
+        self.sounds['menu_music'].play(-1)  # -1 means loop indefinitely
+    
+    def play_gameplay_music(self):
+        pygame.mixer.stop()
+        self.sounds['gameplay_music'].play(-1)
+    
+    def play_collectible_sound(self):
+        self.sounds['collectible'].play()
 
-            # Cek tabrakan
-            if player_rect.inflate(-80, -30).colliderect(o):
-                if shield_active:
-                    obstacles.remove((o, o_type))
-                    shield_hits += 1
-                    if shield_hits >= max_shield_hits:
-                        shield_active = False
+    def load_assets(self):
+        try:
+            self.bg_img = pygame.image.load("assets/menu_start.png").convert()
+            self.start_img = pygame.image.load("assets/start.png").convert_alpha()
+            self.shop_img = pygame.image.load("assets/shop.png").convert_alpha()
+            self.setting_img = pygame.image.load("assets/setting.png").convert_alpha()
+            self.reset_img = pygame.image.load("assets/reset.png").convert_alpha()
+            
+            # Player sprites
+            player_spritesheet = pygame.image.load("assets/player.png").convert_alpha()
+            self.player_frames = self.load_frames(player_spritesheet, 768, 64, 8)
+            self.player_roll_frames = self.load_frames(
+                pygame.image.load("assets/player_roll.png").convert_alpha(), 
+                768, 32, 8
+            )
+            self.player_attack_frames = self.load_frames(
+                pygame.image.load("assets/player_attack.png").convert_alpha(),
+                768, 64, 8
+            )
+            
+            # Obstacles
+            self.obstacle_img = pygame.image.load("assets/obstacle.png").convert_alpha()
+            self.obstacle_arrow_img = pygame.image.load("assets/obstacle_arrow.png").convert_alpha()
+            enemy_img = pygame.image.load("assets/obstacle_enemy.png").convert_alpha()
+            self.enemy_frames = self.load_frames(enemy_img, 135, 64, 4)
+            
+            # Powerups
+            self.coin_frames = self.load_frames(
+                pygame.image.load("assets/coin.png").convert_alpha(),
+                240, 16, 15
+            )
+            self.dj_frames = self.load_frames(
+                pygame.image.load("assets/double_jump.png").convert_alpha(),
+                128, 32, 4
+            )
+            self.shield_frames = self.load_frames(
+                pygame.image.load("assets/shield.png").convert_alpha(),
+                128, 32, 4
+            )
+            self.multiplier_frames = self.load_frames(
+                pygame.image.load("assets/multiplier.png").convert_alpha(),
+                128, 32, 4
+            )
+        except Exception as e:
+            print(f"Failed to load assets: {e}")
+            pygame.quit()
+            sys.exit()
+    
+    def load_frames(self, spritesheet, total_width, height, frame_count):
+        frame_width = total_width // frame_count
+        frames = []
+        for i in range(frame_count):
+            frame = spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, height))
+            frames.append(frame)
+        return frames
+    
+    def load_save(self):
+        if os.path.exists(SAVE_FILE):
+            with open(SAVE_FILE, "r") as f:
+                data = json.load(f)
+                self.save_data.update(data)
+                if "shop_items" in data:
+                    self.shop_items.update(data["shop_items"])
+    
+    def save_game(self):
+        self.save_data["shop_items"] = self.shop_items
+        with open(SAVE_FILE, "w") as f:
+            json.dump(self.save_data, f)
+    
+    def reset_data(self):
+        self.save_data = {"high_score": 0, "total_coin": 0}
+        self.shop_items = {
+            "shield": {"level": 1, "price": 100, "max_level": 5},
+            "double_jump": {"level": 1, "price": 150, "max_level": 3},
+            "multiplier": {"level": 1, "price": 200, "max_level": 3}
+        }
+        self.save_game()
+    
+    def draw_shop(self):
+        self.screen.blit(self.bg_img, (0, 0))
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        # Display coins
+        coins_text = self.font.render(f"Coins: {self.save_data['total_coin']}", True, (255, 255, 0))
+        self.screen.blit(coins_text, (WIDTH - 150, 20))
+        
+        title = self.font.render("SHOP", True, (255, 255, 255))
+        self.screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
+        
+        back_btn = pygame.Rect(20, 20, 80, 40)
+        pygame.draw.rect(self.screen, (200, 50, 50), back_btn)
+        self.screen.blit(self.font.render("Back", True, (255, 255, 255)), (back_btn.x + 20, back_btn.y + 10))
+        
+        buttons = []
+        y_pos = 100
+        
+        for item, data in self.shop_items.items():
+            # Draw item icon
+            if item == "shield":
+                img = self.shield_frames[0]
+            elif item == "double_jump":
+                img = self.dj_frames[0]
+            else:
+                img = self.multiplier_frames[0]
+            
+            img = pygame.transform.scale(img, (50, 50))
+            self.screen.blit(img, (50, y_pos))
+            
+            # Item info
+            self.screen.blit(self.font.render(f"{item.replace('_', ' ').title()}", True, (255, 255, 255)), (120, y_pos))
+            self.screen.blit(self.font.render(f"Lvl: {data['level']}/{data['max_level']}", True, (200, 200, 200)), (120, y_pos + 25))
+            
+            # Buy button
+            if data['level'] < data['max_level']:
+                btn_rect = pygame.Rect(WIDTH - 150, y_pos + 10, 100, 40)
+                btn_color = (50, 200, 50) if self.save_data['total_coin'] >= data['price'] else (100, 100, 100)
+                pygame.draw.rect(self.screen, btn_color, btn_rect)
+                self.screen.blit(self.font.render(f"Buy: {data['price']}", True, (255, 255, 255)), (WIDTH - 140, y_pos + 20))
+                buttons.append((item, btn_rect))
+            
+            y_pos += 80
+        
+        return back_btn, buttons
+    
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            
+            if self.game_state == MENU:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mouse_pos = pygame.mouse.get_pos()
+                    if self.start_button_rect.collidepoint(mouse_pos):
+                        self.game_state = GAMEPLAY
+                        self.play_gameplay_music()
+                        self.reset_game()
+                    elif self.shop_rect.collidepoint(mouse_pos):
+                        self.game_state = SHOP
+                    elif self.setting_rect.collidepoint(mouse_pos):
+                        self.game_state = SETTING  # New state for settings
+                    elif self.reset_rect.collidepoint(mouse_pos):
+                        self.reset_data()
+            
+            elif self.game_state == GAMEPLAY:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_DOWN:
+                        self.player.start_roll()
+                    elif event.key in (pygame.K_SPACE, pygame.K_UP):
+                        self.player.jump()
+                    elif event.key == pygame.K_s:
+                        self.player.attack()
+                    elif event.key == pygame.K_ESCAPE:
+                        self.game_state = MENU
+                        self.play_menu_music()
+                    elif event.key == pygame.K_q:  # Toggle hitbox with Q key
+                        self.settings["hitbox_visible"] = not self.settings["hitbox_visible"]
+            
+            elif self.game_state == SHOP:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mouse_pos = pygame.mouse.get_pos()
+                    back_btn, buy_buttons = self.draw_shop()
+                    
+                    if back_btn.collidepoint(mouse_pos):
+                        self.game_state = MENU
+                    else:
+                        for item, btn_rect in buy_buttons:
+                            if btn_rect.collidepoint(mouse_pos):
+                                self.buy_item(item)
+                                self.play_collectible_sound()  # Play sound when buying
+                                break
+
+            elif self.game_state == SETTING:  # Settings menu
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mouse_pos = pygame.mouse.get_pos()
+                    back_btn, music_btn, sfx_btn = self.draw_settings()
+                    
+                    if back_btn.collidepoint(mouse_pos):
+                        self.game_state = MENU
+                    elif music_btn.collidepoint(mouse_pos):
+                        self.toggle_music()
+                    elif sfx_btn.collidepoint(mouse_pos):
+                        self.toggle_sound_effects()
+    
+    def toggle_music(self):
+        self.settings["music_enabled"] = not self.settings["music_enabled"]
+        if self.settings["music_enabled"]:
+            if self.game_state == MENU:
+                self.play_menu_music()
+            elif self.game_state == GAMEPLAY:
+                self.play_gameplay_music()
+        else:
+            pygame.mixer.stop()
+
+    def toggle_sound_effects(self):
+        self.settings["sound_effects_enabled"] = not self.settings["sound_effects_enabled"]
+    
+    def play_menu_music(self):
+        if not self.settings["music_enabled"]:
+            return
+        pygame.mixer.stop()
+        self.sounds['menu_music'].play(-1)
+
+    def play_gameplay_music(self):
+        if not self.settings["music_enabled"]:
+            return
+        pygame.mixer.stop()
+        self.sounds['gameplay_music'].play(-1)
+    
+    def play_collectible_sound(self):
+        if not self.settings["sound_effects_enabled"]:
+            return
+        self.sounds['collectible'].play()
+
+    def draw_settings(self):
+        self.screen.blit(self.bg_img, (0, 0))
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        title = self.font.render("SETTINGS", True, (255, 255, 255))
+        self.screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
+        
+        # Back button
+        back_btn = pygame.Rect(20, 20, 80, 40)
+        pygame.draw.rect(self.screen, (200, 50, 50), back_btn)
+        self.screen.blit(self.font.render("Back", True, (255, 255, 255)), (back_btn.x + 20, back_btn.y + 10))
+
+        # Music toggle
+        music_btn = pygame.Rect(WIDTH//2 - 100, 120, 200, 50)
+        btn_color = (50, 200, 50) if self.settings["music_enabled"] else (200, 50, 50)
+        pygame.draw.rect(self.screen, btn_color, music_btn)
+        status = "ON" if self.settings["music_enabled"] else "OFF"
+        self.screen.blit(self.font.render(f"Music: {status}", True, (255, 255, 255)), 
+                        (music_btn.x + 50, music_btn.y + 15))
+        
+        # Sound effects toggle
+        sfx_btn = pygame.Rect(WIDTH//2 - 100, 190, 200, 50)
+        btn_color = (50, 200, 50) if self.settings["sound_effects_enabled"] else (200, 50, 50)
+        pygame.draw.rect(self.screen, btn_color, sfx_btn)
+        status = "ON" if self.settings["sound_effects_enabled"] else "OFF"
+        self.screen.blit(self.font.render(f"Sound Effects: {status}", True, (255, 255, 255)), 
+                        (sfx_btn.x + 30, sfx_btn.y + 15))
+        
+        # Hitbox visibility info
+        hitbox_text = self.font.render("Press Q in-game to toggle hitboxes", True, (255, 255, 255))
+        self.screen.blit(hitbox_text, (WIDTH//2 - hitbox_text.get_width()//2, 260))
+        
+        return back_btn, music_btn, sfx_btn
+
+    def buy_item(self, item):
+        if self.save_data['total_coin'] >= self.shop_items[item]['price']:
+            self.save_data['total_coin'] -= self.shop_items[item]['price']
+            self.shop_items[item]['level'] += 1
+            self.shop_items[item]['price'] = int(self.shop_items[item]['price'] * 1.5)
+            self.save_game()
+            
+            # Visual feedback
+            self.draw_shop()
+            pygame.display.flip()
+            pygame.time.delay(100)
+    
+    def reset_game(self):
+        self.player.reset()
+        self.obstacle_manager.reset()
+        self.coin_manager.reset()
+        self.powerup_manager.reset()
+        self.apply_upgrades()
+    
+    def apply_upgrades(self):
+        self.powerup_manager.max_shield_hits = 1 + self.shop_items["shield"]["level"]
+        self.powerup_manager.dj_duration = 20000 + (self.shop_items["double_jump"]["level"] * 10000)
+        self.powerup_manager.multiplier_value = 1 + (0.5 * self.shop_items["multiplier"]["level"])
+        
+        # Adjust spawn intervals based on upgrades
+        self.powerup_manager.shield_spawn_interval = max(3000, 10000 - (self.shop_items["shield"]["level"] * 1500))
+        self.powerup_manager.dj_spawn_interval = max(5000, 15000 - (self.shop_items["double_jump"]["level"] * 3000))
+        self.powerup_manager.multiplier_spawn_interval = max(8000, 15000 - (self.shop_items["multiplier"]["level"] * 2000))
+    
+    def update(self, dt):
+        if self.game_state == GAMEPLAY:
+            self.player.update(dt)
+            self.obstacle_manager.update(dt)
+            self.coin_manager.update(dt)
+            self.powerup_manager.update(dt)
+            
+            # Check collisions
+            self.check_collisions()
+            
+            # Update score
+            if self.player.score_timer >= self.player.score_interval:
+                self.player.score_timer = 0
+                self.player.score += self.powerup_manager.multiplier_value
+    
+    def check_collisions(self):
+        # Check obstacle collisions
+        for obstacle, o_type in self.obstacle_manager.obstacles[:]:
+            if self.player.rect.inflate(-80, -30).colliderect(obstacle):
+                if self.powerup_manager.shield_active:
+                    self.obstacle_manager.obstacles.remove((obstacle, o_type))
+                    self.powerup_manager.shield_hits += 1
+                    if self.powerup_manager.shield_hits >= self.powerup_manager.max_shield_hits:
+                        self.powerup_manager.shield_active = False
                     continue
                 else:
-                    if score > save_data["high_score"]:
-                        save_data["high_score"] = score
-                    save_data["total_coin"] += coin_score
-                    save_game()
-                    game_state = MENU
+                    self.game_over()
                     break
+        
+        # Check coin collisions
+        for coin in self.coin_manager.coins[:]:
+            if self.player.rect.inflate(-80, -30).colliderect(coin):
+                self.coin_manager.coins.remove(coin)
+                self.player.coin_score += 1
+                self.play_collectible_sound()  # Play sound when collecting coin
+    
+    def game_over(self):
+        if self.player.score > self.save_data["high_score"]:
+            self.save_data["high_score"] = self.player.score
+        self.save_data["total_coin"] += self.player.coin_score
+        self.save_game()
+        self.game_state = MENU
+        self.play_menu_music()
+        if 'game_over' in self.sounds:
+            self.sounds['game_over'].play()
+    
+    def render(self):
+        if self.game_state == MENU:
+            self.screen.blit(self.bg_img, (0, 0))
+            self.screen.blit(self.start_img, self.start_button_rect)
+            self.screen.blit(self.shop_img, self.shop_rect)
+            self.screen.blit(self.setting_img, self.setting_rect)
+            self.screen.blit(self.reset_img, self.reset_rect)
+            
+            self.screen.blit(
+                self.font.render(f"High Score: {self.save_data['high_score']}", True, (255, 255, 255)), 
+                (10, 10)
+            )
+            self.screen.blit(
+                self.font.render(f"Total Coins: {self.save_data['total_coin']}", True, (255, 255, 0)), 
+                (10, 40)
+            )
+        
+        elif self.game_state == SHOP:
+            self.draw_shop()
 
-        # Koin
-        if coin_spawn_timer >= coin_spawn_interval:
-            rect = pygame.Rect(WIDTH + random.randint(0, 100), ground_level - random.randint(40, 80), coin_width, coin_height)
-            coins.append(rect)
-            coin_spawn_timer = 0
+        elif self.game_state == SETTING:  # Settings menu
+            self.draw_settings()
+        
+        elif self.game_state == GAMEPLAY:
+            # Draw background
+            self.screen.blit(self.bg_img, (self.player.bg_scroll_x - WIDTH, 0))
+            self.screen.blit(self.bg_img, (self.player.bg_scroll_x, 0))
+            
+            # Draw game objects
+            self.obstacle_manager.draw(self.screen)
+            self.coin_manager.draw(self.screen)
+            self.powerup_manager.draw(self.screen)
+            self.player.draw(self.screen)
+            
+            # Draw UI
+            self.screen.blit(
+                self.font.render(f"Score: {self.player.score}", True, (255, 255, 255)), 
+                (10, 10)
+            )
+            self.screen.blit(
+                self.font.render(f"Coins: {self.player.coin_score}", True, (255, 255, 0)), 
+                (10, 40)
+            )
+            
+            # Draw powerup status
+            if self.powerup_manager.dj_active:
+                elapsed = pygame.time.get_ticks() - self.powerup_manager.dj_timer
+                self.screen.blit(
+                    self.font.render(f"Double Jump: {(self.powerup_manager.dj_duration - elapsed)//1000}s", True, (0, 255, 0)), 
+                    (WIDTH - 220, 10)
+                )
+            
+            if self.powerup_manager.shield_active:
+                self.screen.blit(
+                    self.font.render(f"Shield: {self.powerup_manager.max_shield_hits - self.powerup_manager.shield_hits} hits", True, (128, 128, 255)), 
+                    (WIDTH - 220, 40)
+                )
+            
+            if self.powerup_manager.multiplier_active:
+                elapsed = pygame.time.get_ticks() - self.powerup_manager.multiplier_timer
+                self.screen.blit(
+                    self.font.render(f"Multiplier: {(self.powerup_manager.multiplier_duration - elapsed)//1000}s", True, (255, 215, 0)), 
+                    (WIDTH - 220, 70)
+                )
+            
+            # Debug hitboxes
+            if self.settings["hitbox_visible"]:
+                pygame.draw.rect(self.screen, (255, 0, 0), self.player.rect.inflate(-80, -30), 2)
+                for c in self.coin_manager.coins:
+                    pygame.draw.rect(self.screen, (255, 255, 0), c, 2)
+                for o, o_type in self.obstacle_manager.obstacles:
+                    color = (255, 255, 255) if o_type == "arrow" else (0, 0, 255)
+                    pygame.draw.rect(self.screen, color, o, 2)
+                for dj in self.powerup_manager.double_jumps:
+                    pygame.draw.rect(self.screen, (0, 255, 0), dj, 2)
+                for s in self.powerup_manager.shields:
+                    pygame.draw.rect(self.screen, (0, 0, 255), s, 2)
+                for m in self.powerup_manager.multipliers:
+                    pygame.draw.rect(self.screen, (255, 165, 0), m, 2)
+        
+        pygame.display.flip()
+    
+    def run(self):
+        while self.running:
+            dt = self.clock.tick(60)
+            self.handle_events()
+            self.update(dt)
+            self.render()
+        
+        pygame.quit()
+        sys.exit()
 
-        if coin_animation_timer >= coin_animation_speed:
-            coin_animation_timer = 0
-            coin_frame_index = (coin_frame_index + 1) % len(coin_frames)
-
-        for c in coins[:]:
-            c.x -= obstacle_speed
-            if c.right < 0:
-                coins.remove(c)
-                continue
-            screen.blit(coin_frames[coin_frame_index], c)
-            if player_rect.inflate(-80, -30).colliderect(c):
-                coins.remove(c)
-                coin_score += 1
-
-        # Double Jump
-        if not dj_active and dj_spawn_timer >= dj_spawn_interval:
-            rect = pygame.Rect(WIDTH + random.randint(0, 100), ground_level - random.randint(40, 80), dj_width, dj_height)
-            double_jumps.append(rect)
-            dj_spawn_timer = 0
-
-        if dj_animation_timer >= dj_animation_speed:
-            dj_animation_timer = 0
-            dj_frame_index = (dj_frame_index + 1) % len(dj_frames)
-
-        for dj in double_jumps[:]:
-            dj.x -= obstacle_speed
-            if dj.right < 0:
-                double_jumps.remove(dj)
-                continue
-            screen.blit(dj_frames[dj_frame_index], dj)
-            if player_rect.inflate(-80, -30).colliderect(dj):
-                double_jumps.remove(dj)
-                dj_active = True
-                dj_timer = pygame.time.get_ticks()
-
-        if dj_active:
-            elapsed = pygame.time.get_ticks() - dj_timer
-            if elapsed >= dj_duration:
-                dj_active = False
-            else:
-                t = font.render(f"Double Jump: {(dj_duration - elapsed)//1000}s", True, (0, 255, 0))
-                screen.blit(t, (WIDTH - 220, 10))
-
-        # Shield
-        if not shield_active and shield_spawn_timer >= shield_spawn_interval:
-            rect = pygame.Rect(WIDTH + random.randint(0, 100), ground_level - random.randint(40, 80), shield_width, shield_height)
-            shields.append(rect)
-            shield_spawn_timer = 0
-
-        if shield_animation_timer >= shield_animation_speed:
-            shield_animation_timer = 0
-            shield_frame_index = (shield_frame_index + 1) % len(shield_frames)
-
-        for s in shields[:]:
-            s.x -= obstacle_speed
-            if s.right < 0:
-                shields.remove(s)
-                continue
-            screen.blit(shield_frames[shield_frame_index], s)
-            if player_rect.inflate(-80, -30).colliderect(s):
-                shields.remove(s)
-                shield_active = True
-                shield_hits = 0
-
-        if shield_active:
-            t = font.render(f"Shield: {max_shield_hits - shield_hits} hits", True, (128, 128, 255))
-            screen.blit(t, (WIDTH - 220, 40))
-
-        # Multiplier
-        if not multiplier_active and multiplier_spawn_timer >= multiplier_spawn_interval:
-            rect = pygame.Rect(WIDTH + random.randint(0, 100), ground_level - random.randint(40, 80), multiplier_width, multiplier_height)
-            multipliers.append(rect)
-            multiplier_spawn_timer = 0
-
-        if multiplier_animation_timer >= multiplier_animation_speed:
-            multiplier_animation_timer = 0
-            multiplier_frame_index = (multiplier_frame_index + 1) % len(multiplier_frames)
-
-        for m in multipliers[:]:
-            m.x -= obstacle_speed
-            if m.right < 0:
-                multipliers.remove(m)
-                continue
-            screen.blit(multiplier_frames[multiplier_frame_index], m)
-            if player_rect.inflate(-80, -30).colliderect(m):
-                multipliers.remove(m)
-                multiplier_active = True
-                multiplier_timer = pygame.time.get_ticks()
-                multiplier_value = 2  # Increase score multiplier value
-                
-        if multiplier_active:
-            elapsed = pygame.time.get_ticks() - multiplier_timer
-            if elapsed >= multiplier_duration:
-                multiplier_active = False
-                multiplier_value = 1  # Reset multiplier value
-            else:
-                t = font.render(f"Multiplier: {(multiplier_duration - elapsed)//1000}s", True, (255, 215, 0))
-                screen.blit(t, (WIDTH - 220, 70))
-
-        # Gambar pemain
-        if is_attacking:
-            screen.blit(attack_frames[attack_frame_index], player_rect)
-        elif is_rolling:
-            screen.blit(roll_frames[roll_frame_index], player_rect)
-        else:
-            screen.blit(player_frames[player_frame_index], player_rect)
-
-        # Debug
-        if DEBUG_HITBOX:
-            pygame.draw.rect(screen, (255, 0, 0), player_rect.inflate(-80, -30), 2)
-            for c in coins:
-                pygame.draw.rect(screen, (255, 255, 0), c, 2)
-            for o, o_type in obstacles:
-                if o_type == "arrow":
-                    pygame.draw.rect(screen, (255, 255, 255), o, 2)  # Warna putih untuk obstacle panah
+class Player:
+    def __init__(self, game):
+        self.game = game
+        self.reset()
+        # Hitbox offset untuk animasi yang berbeda
+        self.normal_hitbox = pygame.Rect(0, 0, 768//8, 64)
+        self.roll_hitbox = pygame.Rect(0, 0, 768//8, 32)
+        self.attack_hitbox_rect = pygame.Rect(0, 0, 768//8, 64)
+    
+    def reset(self):
+        self.rect = pygame.Rect(100, HEIGHT - 64 - 50, 768//8, 64)
+        self.speed_y = 0
+        self.gravity = 0.5
+        self.jump_power = -10
+        self.ground_level = HEIGHT - 50
+        self.bg_scroll_x = 0
+        self.bg_speed = 2
+        
+        # Animation
+        self.frame_index = 0
+        self.animation_timer = 0
+        self.animation_speed = 100
+        
+        # Rolling
+        self.is_rolling = False
+        self.roll_timer = 0
+        self.roll_duration = 1000
+        
+        # Attacking
+        self.is_attacking = False
+        self.attack_frame_index = 0
+        self.attack_animation_timer = 0
+        self.attack_animation_speed = 80
+        self.attack_timer = 0
+        self.attack_duration = 1000
+        self.attack_cooldown = 0
+        self.last_attack_time = 0
+        self.attack_hitbox = None
+        
+        # Game stats
+        self.score = 0
+        self.coin_score = 0
+        self.score_timer = 0
+        self.score_interval = 100
+        
+        # Jumping
+        self.has_jumped_once = False
+    
+    def update(self, dt):
+    # Apply gravity
+        self.speed_y += self.gravity
+        self.rect.y += self.speed_y
+        
+        # Ground collision
+        if self.rect.bottom >= self.ground_level:
+            self.rect.bottom = self.ground_level
+            self.speed_y = 0
+            self.has_jumped_once = False
+        
+        # Check if roll should end
+        if self.is_rolling and pygame.time.get_ticks() - self.roll_timer >= self.roll_duration:
+            self.end_roll()
+        
+        # Update animations
+        self.update_animations(dt)
+        
+        # Background scrolling
+        self.bg_scroll_x = (self.bg_scroll_x - self.bg_speed) % WIDTH
+        
+        # Update score timer
+        self.score_timer += dt
+    
+    def update_animations(self, dt):
+        # Player animation
+        if self.is_rolling:
+            self.animation_timer += dt
+            if self.animation_timer >= self.animation_speed:
+                self.animation_timer = 0
+                self.frame_index = (self.frame_index + 1) % len(self.game.player_roll_frames)
+        elif self.is_attacking:
+            self.attack_animation_timer += dt
+            if self.attack_animation_timer >= self.attack_animation_speed:
+                self.attack_animation_timer = 0
+                self.attack_frame_index += 1
+                if self.attack_frame_index >= len(self.game.player_attack_frames):
+                    self.attack_frame_index = 0
+                    self.is_attacking = False
                 else:
-                    pygame.draw.rect(screen, (0, 0, 255), o, 2)
-            for dj in double_jumps:
-                pygame.draw.rect(screen, (0, 255, 0), dj, 2)
-            for s in shields:
-                pygame.draw.rect(screen, (0, 0, 255), s, 2)
-            for m in multipliers:
-                pygame.draw.rect(screen, (255, 165, 0), m, 2)  # Warna oranye untuk multiplier
+                    # Update attack hitbox
+                    self.attack_hitbox = pygame.Rect(
+                        self.rect.right - 20, 
+                        self.rect.top + 20, 
+                        60, 
+                        self.rect.height - 40)
+        else:
+            self.animation_timer += dt
+            if self.animation_timer >= self.animation_speed:
+                self.animation_timer = 0
+                self.frame_index = (self.frame_index + 1) % len(self.game.player_frames)
+        
+        
+    
+    def start_roll(self):
+        # Bisa roll baik di tanah maupun di udara
+        if not self.is_rolling and not self.is_attacking:
+            self.is_rolling = True
+            self.is_attacking = False  # Pastikan tidak dalam keadaan attack
+            self.roll_timer = pygame.time.get_ticks()
+            # Simpan posisi bawah sebelum mengubah ukuran
+            bottom = self.rect.bottom
+            self.rect.height = 32
+            self.rect.bottom = bottom  # Pertahankan posisi bawah
+    
+    def end_roll(self):
+        self.is_rolling = False
+        self.rect.height = 64  # Kembalikan ke tinggi normal
+        self.rect.y = self.ground_level - self.rect.height  # Sesuaikan posisi Y
 
-        # Tampilkan skor
-        screen.blit(font.render(f"Score: {score}", True, (255, 255, 255)), (10, 10))  # Naikkan posisi sedikit
-        screen.blit(font.render(f"Coins: {coin_score}", True, (255, 255, 0)), (10, 40))  # Naikkan posisi sedikit
+    def jump(self):
+        if self.rect.bottom >= self.ground_level:
+            self.speed_y = self.jump_power
+            self.has_jumped_once = False
+        elif self.game.powerup_manager.dj_active and not self.has_jumped_once:
+            self.speed_y = self.jump_power
+            self.has_jumped_once = True
+    
+    def attack(self):
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_attack_time > self.attack_cooldown:
+            # Jika sedang roll, batalkan roll
+            if self.is_rolling:
+                self.end_roll()
+            
+            self.is_attacking = True
+            self.is_rolling = False  # Pastikan tidak dalam keadaan roll
+            self.attack_frame_index = 0
+            self.last_attack_time = current_time
+            self.attack_hitbox = pygame.Rect(
+                self.rect.right - 20, 
+                self.rect.top + 20, 
+                60, 
+                self.rect.height - 40
+            )
+    
+    def draw(self, screen):
+        if self.is_attacking:
+            screen.blit(self.game.player_attack_frames[self.attack_frame_index], self.rect)
+        elif self.is_rolling:
+            screen.blit(self.game.player_roll_frames[self.frame_index], self.rect)
+        else:
+            screen.blit(self.game.player_frames[self.frame_index], self.rect)
 
-    pygame.display.flip()
+class ObstacleManager:
+    def __init__(self, game):
+        self.game = game
+        self.obstacles = []
+        self.obstacle_spawn_timer = 0
+        self.obstacle_spawn_interval = 1500
+        self.obstacle_speed = 4
+    
+    def reset(self):
+        self.obstacles.clear()
+        self.obstacle_spawn_timer = 0
+        self.obstacle_spawn_interval = 1500
+    
+    def update(self, dt):
+        self.obstacle_spawn_timer += dt
+        
+        # Spawn new obstacles
+        if self.obstacle_spawn_timer >= self.obstacle_spawn_interval:
+            if random.random() < 0.5:
+                # Normal ground obstacle
+                rect = self.game.obstacle_img.get_rect(bottom=self.game.player.ground_level, left=WIDTH + random.randint(0, 100))
+                self.obstacles.append((rect, "normal"))
+            elif random.random() < 0.3:
+                # Arrow obstacle in air
+                arrow_y = self.game.player.ground_level - random.choice([60, 80])
+                rect = self.game.obstacle_arrow_img.get_rect(left=WIDTH + random.randint(0, 100), top=arrow_y)
+                self.obstacles.append((rect, "arrow"))
+            elif random.random() < 0.2:
+                # Enemy obstacle
+                rect = pygame.Rect(
+                    WIDTH + random.randint(0, 100), 
+                    self.game.player.ground_level - 64, 
+                    self.game.enemy_frames[0].get_width(), 
+                    self.game.enemy_frames[0].get_height()
+                )
+                self.obstacles.append((rect, "enemy"))
+            
+            self.obstacle_spawn_timer = 0
+            self.obstacle_spawn_interval = max(800, self.obstacle_spawn_interval - 10)
+        
+        # Update obstacles
+        for obstacle, o_type in self.obstacles[:]:
+            obstacle.x -= self.obstacle_speed
+            
+            # Remove off-screen obstacles
+            if obstacle.right < 0:
+                self.obstacles.remove((obstacle, o_type))
+                continue
+            
+            # Check attack collisions with enemies
+            if self.game.player.is_attacking and self.game.player.attack_hitbox and o_type == "enemy":
+                if self.game.player.attack_hitbox.colliderect(obstacle):
+                    self.obstacles.remove((obstacle, o_type))
+                    self.game.player.score += 50
+    
+    def draw(self, screen):
+        for obstacle, o_type in self.obstacles:
+            if o_type == "normal":
+                screen.blit(self.game.obstacle_img, obstacle)
+            elif o_type == "arrow":
+                screen.blit(self.game.obstacle_arrow_img, obstacle)
+            elif o_type == "enemy":
+                screen.blit(self.game.enemy_frames[self.game.powerup_manager.enemy_frame_index], obstacle)
 
-pygame.quit()
-sys.exit()
+class CoinManager:
+    def __init__(self, game):
+        self.game = game
+        self.coins = []
+        self.coin_spawn_timer = 0
+        self.coin_spawn_interval = 1500
+        self.coin_frame_index = 0
+        self.coin_animation_timer = 0
+        self.coin_animation_speed = 100
+        self.coin_size = 16  # Ukuran coin yang ditampilkan di game
+    
+    def reset(self):
+        self.coins.clear()
+        self.coin_spawn_timer = 0
+    
+    def update(self, dt):
+        self.coin_spawn_timer += dt
+        self.coin_animation_timer += dt
+        
+        # Spawn new coins
+        if self.coin_spawn_timer >= self.coin_spawn_interval:
+            rect = pygame.Rect(
+                WIDTH + random.randint(0, 100),
+                self.game.player.ground_level - random.randint(40, 80),
+                16,  # Lebar coin
+                16   # Tinggi coin
+            )
+            self.coins.append(rect)
+            self.coin_spawn_timer = 0
+        
+        # Update coin animation
+        if self.coin_animation_timer >= self.coin_animation_speed:
+            self.coin_animation_timer = 0
+            self.coin_frame_index = (self.coin_frame_index + 1) % len(self.game.coin_frames)
+        
+        # Update coin positions
+        for coin in self.coins[:]:
+            coin.x -= self.game.obstacle_manager.obstacle_speed
+            
+            # Remove off-screen coins
+            if coin.right < 0:
+                self.coins.remove(coin)
+                continue
+    
+    def draw(self, screen):
+        for coin in self.coins:
+            # Scale frame ke ukuran yang diinginkan
+            frame = pygame.transform.scale(
+                self.game.coin_frames[self.coin_frame_index],
+                (coin.width, coin.height)
+            )
+            screen.blit(frame, coin)
+
+class PowerupManager:
+    def __init__(self, game):
+        self.game = game
+        self.reset()
+        
+        # Animation
+        self.animation_speed = 100  # Kecepatan animasi yang sama untuk semua powerup
+        self.dj_frame_index = 0
+        self.dj_animation_timer = 0
+        self.dj_animation_speed = 100
+        
+        self.shield_frame_index = 0
+        self.shield_animation_timer = 0
+        self.shield_animation_speed = 100
+        
+        self.multiplier_frame_index = 0
+        self.multiplier_animation_timer = 0
+        self.multiplier_animation_speed = 100
+        
+        self.enemy_frame_index = 0
+        self.enemy_animation_timer = 0
+        self.enemy_animation_speed = 150
+    
+    def reset(self):
+        # Powerups
+        self.double_jumps = []
+        self.shields = []
+        self.multipliers = []
+        
+        # Spawn timers
+        self.dj_spawn_timer = 0
+        self.dj_spawn_interval = 7000
+        self.shield_spawn_timer = 0
+        self.shield_spawn_interval = 10000
+        self.multiplier_spawn_timer = 0
+        self.multiplier_spawn_interval = 12000
+        
+        # Active powerups
+        self.dj_active = False
+        self.dj_timer = 0
+        self.dj_duration = 30000
+        
+        self.shield_active = False
+        self.shield_hits = 0
+        self.max_shield_hits = 2
+        
+        self.multiplier_active = False
+        self.multiplier_timer = 0
+        self.multiplier_duration = 10000
+        self.multiplier_value = 1
+    
+    def update(self, dt):
+        # Update animations
+        self.update_animations(dt)
+        
+        # Spawn powerups
+        self.spawn_powerups(dt)
+        
+        # Update active powerups
+        self.update_active_powerups()
+    
+    def update_animations(self, dt):
+
+        # Double jump animation
+        self.dj_animation_timer += dt
+        if self.dj_animation_timer >= self.dj_animation_speed:
+            self.dj_animation_timer = 0
+            self.dj_frame_index = (self.dj_frame_index + 1) % len(self.game.dj_frames)
+        
+        # Shield animation
+        self.shield_animation_timer += dt
+        if self.shield_animation_timer >= self.shield_animation_speed:
+            self.shield_animation_timer = 0
+            self.shield_frame_index = (self.shield_frame_index + 1) % len(self.game.shield_frames)
+        
+        # Multiplier animation
+        self.multiplier_animation_timer += dt
+        if self.multiplier_animation_timer >= self.multiplier_animation_speed:
+            self.multiplier_animation_timer = 0
+            self.multiplier_frame_index = (self.multiplier_frame_index + 1) % len(self.game.multiplier_frames)
+        
+        # Enemy animation
+        self.enemy_animation_timer += dt
+        if self.enemy_animation_timer >= self.enemy_animation_speed:
+            self.enemy_animation_timer = 0
+            self.enemy_frame_index = (self.enemy_frame_index + 1) % len(self.game.enemy_frames)
+    
+    def spawn_powerups(self, dt):
+        # Spawn double jump
+        if not self.dj_active:
+            self.dj_spawn_timer += dt
+            if self.dj_spawn_timer >= self.dj_spawn_interval:
+                rect = pygame.Rect(
+                    WIDTH + random.randint(0, 100), 
+                    self.game.player.ground_level - random.randint(40, 80), 
+                    self.game.dj_frames[0].get_width(), 
+                    self.game.dj_frames[0].get_height()
+                )
+                self.double_jumps.append(rect)
+                self.dj_spawn_timer = 0
+        
+        # Spawn shield
+        if not self.shield_active:
+            self.shield_spawn_timer += dt
+            if self.shield_spawn_timer >= self.shield_spawn_interval:
+                rect = pygame.Rect(
+                    WIDTH + random.randint(0, 100), 
+                    self.game.player.ground_level - random.randint(40, 80), 
+                    self.game.shield_frames[0].get_width(), 
+                    self.game.shield_frames[0].get_height()
+                )
+                self.shields.append(rect)
+                self.shield_spawn_timer = 0
+        
+        # Spawn multiplier
+        if not self.multiplier_active:
+            self.multiplier_spawn_timer += dt
+            if self.multiplier_spawn_timer >= self.multiplier_spawn_interval:
+                rect = pygame.Rect(
+                    WIDTH + random.randint(0, 100), 
+                    self.game.player.ground_level - random.randint(40, 80), 
+                    self.game.multiplier_frames[0].get_width(), 
+                    self.game.multiplier_frames[0].get_height()
+                )
+                self.multipliers.append(rect)
+                self.multiplier_spawn_timer = 0
+        
+        # Update powerup positions and check collisions
+        self.update_powerups()
+    
+    def update_powerups(self):
+        # Double jumps
+        for dj in self.double_jumps[:]:
+            dj.x -= self.game.obstacle_manager.obstacle_speed
+            
+            if dj.right < 0:
+                self.double_jumps.remove(dj)
+                continue
+            
+            if self.game.player.rect.inflate(-80, -30).colliderect(dj):
+                self.double_jumps.remove(dj)
+                self.dj_active = True
+                self.dj_timer = pygame.time.get_ticks()
+                self.game.play_collectible_sound()  # Play sound when collecting double jump
+        
+        # Shields
+        for shield in self.shields[:]:
+            shield.x -= self.game.obstacle_manager.obstacle_speed
+            
+            if shield.right < 0:
+                self.shields.remove(shield)
+                continue
+            
+            if self.game.player.rect.inflate(-80, -30).colliderect(shield):
+                self.shields.remove(shield)
+                self.shield_active = True
+                self.shield_hits = 0
+                self.game.play_collectible_sound()  # Play sound when collecting double jump
+        
+        # Multipliers
+        for multiplier in self.multipliers[:]:
+            multiplier.x -= self.game.obstacle_manager.obstacle_speed
+            
+            if multiplier.right < 0:
+                self.multipliers.remove(multiplier)
+                continue
+            
+            if self.game.player.rect.inflate(-80, -30).colliderect(multiplier):
+                self.multipliers.remove(multiplier)
+                self.multiplier_active = True
+                self.multiplier_timer = pygame.time.get_ticks()
+                self.multiplier_value = 2
+                self.game.play_collectible_sound()  # Play sound when collecting double jump
+    
+    def update_active_powerups(self):
+        # Double jump
+        if self.dj_active:
+            elapsed = pygame.time.get_ticks() - self.dj_timer
+            if elapsed >= self.dj_duration:
+                self.dj_active = False
+        
+        # Multiplier
+        if self.multiplier_active:
+            elapsed = pygame.time.get_ticks() - self.multiplier_timer
+            if elapsed >= self.multiplier_duration:
+                self.multiplier_active = False
+                self.multiplier_value = 1
+    
+    def draw(self, screen):
+        # Draw double jumps
+        for dj in self.double_jumps:
+            frame = pygame.transform.scale(
+                self.game.dj_frames[self.dj_frame_index],
+                (32, 32)  # Ukuran konsisten
+            )
+            screen.blit(frame, dj)
+        
+        # Draw shields
+        for shield in self.shields:
+            frame = pygame.transform.scale(
+                self.game.shield_frames[self.shield_frame_index],
+                (32, 32)
+            )
+            screen.blit(frame, shield)
+        
+        # Draw multipliers
+        for multiplier in self.multipliers:
+            frame = pygame.transform.scale(
+                self.game.multiplier_frames[self.multiplier_frame_index],
+                (32, 32)
+            )
+            screen.blit(frame, multiplier)
+
+if __name__ == "__main__":
+    game = Game()
+    game.run()
