@@ -1,0 +1,6 @@
+Tombol:
+"SPACE", "PANAH ATAS" = Lompat
+"PANAH BAWAH" = ROLL
+"S" = SERANG
+"Q" = TOOGLE HITBOX
+"ESC" = KELUAR
