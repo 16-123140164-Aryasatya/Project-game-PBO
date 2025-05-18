@@ -414,8 +414,7 @@ class Game:
         self.save_game()
         self.game_state = MENU
         self.play_menu_music()
-        if 'game_over' in self.sounds:
-            self.sounds['game_over'].play()
+        
     
     def render(self):
         if self.game_state == MENU:
@@ -625,7 +624,14 @@ class Player:
     def end_roll(self):
         self.is_rolling = False
         self.rect.height = 64  # Kembalikan ke tinggi normal
-        self.rect.y = self.ground_level - self.rect.height  # Sesuaikan posisi Y
+        # Hitung posisi bawah yang baru berdasarkan posisi saat ini
+        new_bottom = self.rect.bottom
+        self.rect.bottom = new_bottom  # Pertahankan posisi bawah saat ini
+        
+        # Jika posisi bawah melebihi ground level, set ke ground level
+        if self.rect.bottom > self.ground_level:
+            self.rect.bottom = self.ground_level
+            self.speed_y = 0
 
     def jump(self):
         if self.rect.bottom >= self.ground_level:
