@@ -207,7 +207,7 @@ class Game:
             
             # Buy button
             if data['level'] < data['max_level']:
-                btn_rect = pygame.Rect(WIDTH - 150, y_pos + 10, 100, 40)
+                btn_rect = pygame.Rect(WIDTH - 150, y_pos + 10, 120, 40)
                 btn_color = (50, 200, 50) if self.save_data['total_coin'] >= data['price'] else (100, 100, 100)
                 pygame.draw.rect(self.screen, btn_color, btn_rect)
                 self.screen.blit(self.font.render(f"Buy: {data['price']}", True, (255, 255, 255)), (WIDTH - 140, y_pos + 20))
@@ -316,20 +316,20 @@ class Game:
         self.screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
         
         # Back button
-        back_btn = pygame.Rect(20, 20, 80, 40)
+        back_btn = pygame.Rect(20, 20, 90, 40)
         pygame.draw.rect(self.screen, (200, 50, 50), back_btn)
-        self.screen.blit(self.font.render("Back", True, (255, 255, 255)), (back_btn.x + 20, back_btn.y + 10))
+        self.screen.blit(self.font.render("Back", True, (255, 255, 255)), (back_btn.x + 15, back_btn.y + 10))
 
         # Music toggle
-        music_btn = pygame.Rect(WIDTH//2 - 100, 120, 200, 50)
+        music_btn = pygame.Rect(WIDTH//2 - 100, 120, 260, 50)
         btn_color = (50, 200, 50) if self.settings["music_enabled"] else (200, 50, 50)
         pygame.draw.rect(self.screen, btn_color, music_btn)
         status = "ON" if self.settings["music_enabled"] else "OFF"
-        self.screen.blit(self.font.render(f"Music: {status}", True, (255, 255, 255)), 
+        self.screen.blit(self.font.render(f"Music:            {status}", True, (255, 255, 255)), 
                         (music_btn.x + 50, music_btn.y + 15))
         
         # Sound effects toggle
-        sfx_btn = pygame.Rect(WIDTH//2 - 100, 190, 200, 50)
+        sfx_btn = pygame.Rect(WIDTH//2 - 100, 190, 260, 50)
         btn_color = (50, 200, 50) if self.settings["sound_effects_enabled"] else (200, 50, 50)
         pygame.draw.rect(self.screen, btn_color, sfx_btn)
         status = "ON" if self.settings["sound_effects_enabled"] else "OFF"
@@ -607,8 +607,6 @@ class Player:
             if self.animation_timer >= self.animation_speed:
                 self.animation_timer = 0
                 self.frame_index = (self.frame_index + 1) % len(self.game.player_frames)
-        
-        
     
     def start_roll(self):
         # Bisa roll baik di tanah maupun di udara
