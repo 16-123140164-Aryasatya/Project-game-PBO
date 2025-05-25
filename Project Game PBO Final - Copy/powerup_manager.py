@@ -1,221 +1,29 @@
 import pygame
 import random
-from abc import ABC, abstractmethod
-
-class Powerup(ABC):
-    def __init__(self, game):
-        self.game = game
-        self.items = []
-        self.spawn_timer = 0
-        self.spawn_interval = 0
-        self.active = False
-        self.timer = 0
-        self.duration = 0
-        self.frame_index = 0
-        self.animation_timer = 0
-        self.animation_speed = 100
-    
-    @abstractmethod
-    def _load_frames(self):
-        pass
-    
-    @abstractmethod
-    def _spawn(self):
-        pass
-    
-    @abstractmethod
-    def activate(self):
-        pass
-    
-    def reset(self):
-        self.items = []
-        self.spawn_timer = 0
-        self.active = False
-        self.timer = 0
-        self.frame_index = 0
-        self.animation_timer = 0
-    
-    def update(self, dt):
-        if not self.active:
-            self.spawn_timer += dt
-            if self.spawn_timer >= self.spawn_interval:
-                self._spawn()
-                self.spawn_timer = 0
-        
-        self._update_animation(dt)
-        self._update_items()
-        self._update_active()
-    
-    def _update_animation(self, dt):
-        self.animation_timer += dt
-        if self.animation_timer >= self.animation_speed:
-            self.animation_timer = 0
-            self.frame_index = (self.frame_index + 1) % len(self.frames)
-    
-    def _update_items(self):
-        for item in self.items[:]:
-            item.x -= self.game.obstacle_manager.obstacle_speed
-            
-            if item.right < 0:
-                self.items.remove(item)
-                continue
-            
-            if self.game.player.rect.inflate(-80, -30).colliderect(item):
-                self.items.remove(item)
-                self.activate()
-                self.game.play_collectible_sound()
-    
-    def _update_active(self):
-        if self.active:
-            elapsed = pygame.time.get_ticks() - self.timer
-            if elapsed >= self.duration:
-                self.active = False
-    
-    @abstractmethod
-    def draw(self, screen):
-        pass
-
-class DoubleJumpPowerup(Powerup):
-    def __init__(self, game):
-        super().__init__(game)
-        self._load_frames()
-        self.spawn_interval = 7000
-        self.duration = 30000
-    
-    def _load_frames(self):
-        self.frames = self._load_frames_from_sheet(
-            pygame.image.load("assets/double_jump.png").convert_alpha(),
-            128, 32, 4
-        )
-    
-    def _load_frames_from_sheet(self, spritesheet, total_width, height, frame_count):
-        frame_width = total_width // frame_count
-        return [spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, height)) 
-                for i in range(frame_count)]
-    
-    def _spawn(self):
-        rect = pygame.Rect(
-            self.game.WIDTH + random.randint(0, 100), 
-            self.game.player.ground_level - random.randint(40, 80), 
-            self.frames[0].get_width(), 
-            self.frames[0].get_height()
-        )
-        self.items.append(rect)
-    
-    def activate(self):
-        self.active = True
-        self.timer = pygame.time.get_ticks()
-    
-    def draw(self, screen):
-        for dj in self.items:
-            frame = pygame.transform.scale(
-                self.frames[self.frame_index],
-                (32, 32)
-            )
-            screen.blit(frame, dj)
-
-class ShieldPowerup(Powerup):
-    def __init__(self, game):
-        super().__init__(game)
-        self._load_frames()
-        self.spawn_interval = 10000
-        self.max_hits = 2
-        self.hits = 0
-    
-    def _load_frames(self):
-        self.frames = self._load_frames_from_sheet(
-            pygame.image.load("assets/shield.png").convert_alpha(),
-            128, 32, 4
-        )
-    
-    def _load_frames_from_sheet(self, spritesheet, total_width, height, frame_count):
-        frame_width = total_width // frame_count
-        return [spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, height)) 
-                for i in range(frame_count)]
-    
-    def _spawn(self):
-        rect = pygame.Rect(
-            self.game.WIDTH + random.randint(0, 100), 
-            self.game.player.ground_level - random.randint(40, 80), 
-            self.frames[0].get_width(), 
-            self.frames[0].get_height()
-        )
-        self.items.append(rect)
-    
-    def activate(self):
-        self.active = True
-        self.hits = 0
-    
-    def draw(self, screen):
-        for shield in self.items:
-            frame = pygame.transform.scale(
-                self.frames[self.frame_index],
-                (32, 32)
-            )
-            screen.blit(frame, shield)
-
-class MultiplierPowerup(Powerup):
-    def __init__(self, game):
-        super().__init__(game)
-        self._load_frames()
-        self.spawn_interval = 12000
-        self.duration = 10000
-        self.value = 1
-    
-    def _load_frames(self):
-        self.frames = self._load_frames_from_sheet(
-            pygame.image.load("assets/multiplier.png").convert_alpha(),
-            128, 32, 4
-        )
-    
-    def _load_frames_from_sheet(self, spritesheet, total_width, height, frame_count):
-        frame_width = total_width // frame_count
-        return [spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, height)) 
-                for i in range(frame_count)]
-    
-    def _spawn(self):
-        rect = pygame.Rect(
-            self.game.WIDTH + random.randint(0, 100), 
-            self.game.player.ground_level - random.randint(40, 80), 
-            self.frames[0].get_width(), 
-            self.frames[0].get_height()
-        )
-        self.items.append(rect)
-    
-    def activate(self):
-        self.active = True
-        self.timer = pygame.time.get_ticks()
-        self.value = 2
-    
-    def _update_active(self):
-        if self.active:
-            elapsed = pygame.time.get_ticks() - self.timer
-            if elapsed >= self.duration:
-                self.active = False
-                self.value = 1
-    
-    def draw(self, screen):
-        for multiplier in self.items:
-            frame = pygame.transform.scale(
-                self.frames[self.frame_index],
-                (32, 32)
-            )
-            screen.blit(frame, multiplier)
 
 class PowerupManager:
     def __init__(self, game):
         self.game = game
-        self.double_jump = DoubleJumpPowerup(game)
-        self.shield = ShieldPowerup(game)
-        self.multiplier = MultiplierPowerup(game)
-        
+        self.reset()
+        self._load_assets()
+    
+    def _load_assets(self):
+        self.dj_frames = self._load_frames(
+            pygame.image.load("assets/double_jump.png").convert_alpha(),
+            128, 32, 4
+        )
+        self.shield_frames = self._load_frames(
+            pygame.image.load("assets/shield.png").convert_alpha(),
+            128, 32, 4
+        )
+        self.multiplier_frames = self._load_frames(
+            pygame.image.load("assets/multiplier.png").convert_alpha(),
+            128, 32, 4
+        )
         self.enemy_frames = self._load_frames(
             pygame.image.load("assets/obstacle_enemy.png").convert_alpha(),
             135, 64, 4
         )
-        self.enemy_frame_index = 0
-        self.enemy_animation_timer = 0
-        self.enemy_animation_speed = 150
     
     def _load_frames(self, spritesheet, total_width, height, frame_count):
         frame_width = total_width // frame_count
@@ -223,19 +31,74 @@ class PowerupManager:
                 for i in range(frame_count)]
     
     def reset(self):
-        self.double_jump.reset()
-        self.shield.reset()
-        self.multiplier.reset()
+        self.double_jumps = []
+        self.shields = []
+        self.multipliers = []
+        
+        self.dj_spawn_timer = 0
+        self.dj_spawn_interval = 7000
+        self.shield_spawn_timer = 0
+        self.shield_spawn_interval = 10000
+        self.multiplier_spawn_timer = 0
+        self.multiplier_spawn_interval = 12000
+        
+        self.dj_active = False
+        self.dj_timer = 0
+        self.dj_duration = 30000
+        
+        self.shield_active = False
+        self.shield_hits = 0
+        self.max_shield_hits = 2
+        
+        self.multiplier_active = False
+        self.multiplier_timer = 0
+        self.multiplier_duration = 10000
+        self.multiplier_value = 1
+        
+        self.dj_frame_index = 0
+        self.dj_animation_timer = 0
+        self.dj_animation_speed = 100
+        
+        self.shield_frame_index = 0
+        self.shield_animation_timer = 0
+        self.shield_animation_speed = 100
+        
+        self.multiplier_frame_index = 0
+        self.multiplier_animation_timer = 0
+        self.multiplier_animation_speed = 100
         
         self.enemy_frame_index = 0
         self.enemy_animation_timer = 0
+        self.enemy_animation_speed = 150
     
     def update(self, dt):
-        self.double_jump.update(dt)
-        self.shield.update(dt)
-        self.multiplier.update(dt)
-        
+        self._update_animations(dt)
+        self._spawn_powerups(dt)
+        self._update_active_powerups()
+    
+    def _update_animations(self, dt):
+        self._update_dj_animation(dt)
+        self._update_shield_animation(dt)
+        self._update_multiplier_animation(dt)
         self._update_enemy_animation(dt)
+    
+    def _update_dj_animation(self, dt):
+        self.dj_animation_timer += dt
+        if self.dj_animation_timer >= self.dj_animation_speed:
+            self.dj_animation_timer = 0
+            self.dj_frame_index = (self.dj_frame_index + 1) % len(self.dj_frames)
+    
+    def _update_shield_animation(self, dt):
+        self.shield_animation_timer += dt
+        if self.shield_animation_timer >= self.shield_animation_speed:
+            self.shield_animation_timer = 0
+            self.shield_frame_index = (self.shield_frame_index + 1) % len(self.shield_frames)
+    
+    def _update_multiplier_animation(self, dt):
+        self.multiplier_animation_timer += dt
+        if self.multiplier_animation_timer >= self.multiplier_animation_speed:
+            self.multiplier_animation_timer = 0
+            self.multiplier_frame_index = (self.multiplier_frame_index + 1) % len(self.multiplier_frames)
     
     def _update_enemy_animation(self, dt):
         self.enemy_animation_timer += dt
@@ -243,95 +106,144 @@ class PowerupManager:
             self.enemy_animation_timer = 0
             self.enemy_frame_index = (self.enemy_frame_index + 1) % len(self.enemy_frames)
     
+    def _spawn_powerups(self, dt):
+        if not self.dj_active:
+            self._spawn_double_jump(dt)
+        
+        if not self.shield_active:
+            self._spawn_shield(dt)
+        
+        if not self.multiplier_active:
+            self._spawn_multiplier(dt)
+        
+        self._update_powerups()
+    
+    def _spawn_double_jump(self, dt):
+        self.dj_spawn_timer += dt
+        if self.dj_spawn_timer >= self.dj_spawn_interval:
+            rect = pygame.Rect(
+                self.game.WIDTH + random.randint(0, 100), 
+                self.game.player.ground_level - random.randint(40, 80), 
+                self.dj_frames[0].get_width(), 
+                self.dj_frames[0].get_height()
+            )
+            self.double_jumps.append(rect)
+            self.dj_spawn_timer = 0
+    
+    def _spawn_shield(self, dt):
+        self.shield_spawn_timer += dt
+        if self.shield_spawn_timer >= self.shield_spawn_interval:
+            rect = pygame.Rect(
+                self.game.WIDTH + random.randint(0, 100), 
+                self.game.player.ground_level - random.randint(40, 80), 
+                self.shield_frames[0].get_width(), 
+                self.shield_frames[0].get_height()
+            )
+            self.shields.append(rect)
+            self.shield_spawn_timer = 0
+    
+    def _spawn_multiplier(self, dt):
+        self.multiplier_spawn_timer += dt
+        if self.multiplier_spawn_timer >= self.multiplier_spawn_interval:
+            rect = pygame.Rect(
+                self.game.WIDTH + random.randint(0, 100), 
+                self.game.player.ground_level - random.randint(40, 80), 
+                self.multiplier_frames[0].get_width(), 
+                self.multiplier_frames[0].get_height()
+            )
+            self.multipliers.append(rect)
+            self.multiplier_spawn_timer = 0
+    
+    def _update_powerups(self):
+        self._update_double_jumps()
+        self._update_shields()
+        self._update_multipliers()
+    
+    def _update_double_jumps(self):
+        for dj in self.double_jumps[:]:
+            dj.x -= self.game.obstacle_manager.obstacle_speed
+            
+            if dj.right < 0:
+                self.double_jumps.remove(dj)
+                continue
+            
+            if self.game.player.rect.inflate(-80, -30).colliderect(dj):
+                self.double_jumps.remove(dj)
+                self.dj_active = True
+                self.dj_timer = pygame.time.get_ticks()
+                self.game.play_collectible_sound()
+    
+    def _update_shields(self):
+        for shield in self.shields[:]:
+            shield.x -= self.game.obstacle_manager.obstacle_speed
+            
+            if shield.right < 0:
+                self.shields.remove(shield)
+                continue
+            
+            if self.game.player.rect.inflate(-80, -30).colliderect(shield):
+                self.shields.remove(shield)
+                self.shield_active = True
+                self.shield_hits = 0
+                self.game.play_collectible_sound()
+    
+    def _update_multipliers(self):
+        for multiplier in self.multipliers[:]:
+            multiplier.x -= self.game.obstacle_manager.obstacle_speed
+            
+            if multiplier.right < 0:
+                self.multipliers.remove(multiplier)
+                continue
+            
+            if self.game.player.rect.inflate(-80, -30).colliderect(multiplier):
+                self.multipliers.remove(multiplier)
+                self.multiplier_active = True
+                self.multiplier_timer = pygame.time.get_ticks()
+                self.multiplier_value = 2
+                self.game.play_collectible_sound()
+    
+    def _update_active_powerups(self):
+        self._update_dj_active()
+        self._update_multiplier_active()
+    
+    def _update_dj_active(self):
+        if self.dj_active:
+            elapsed = pygame.time.get_ticks() - self.dj_timer
+            if elapsed >= self.dj_duration:
+                self.dj_active = False
+    
+    def _update_multiplier_active(self):
+        if self.multiplier_active:
+            elapsed = pygame.time.get_ticks() - self.multiplier_timer
+            if elapsed >= self.multiplier_duration:
+                self.multiplier_active = False
+                self.multiplier_value = 1
+    
     def draw(self, screen):
-        self.double_jump.draw(screen)
-        self.shield.draw(screen)
-        self.multiplier.draw(screen)
+        self._draw_double_jumps(screen)
+        self._draw_shields(screen)
+        self._draw_multipliers(screen)
     
-    @property
-    def dj_active(self):
-        return self.double_jump.active
+    def _draw_double_jumps(self, screen):
+        for dj in self.double_jumps:
+            frame = pygame.transform.scale(
+                self.dj_frames[self.dj_frame_index],
+                (32, 32)
+            )
+            screen.blit(frame, dj)
     
-    @property
-    def dj_timer(self):
-        return self.double_jump.timer
+    def _draw_shields(self, screen):
+        for shield in self.shields:
+            frame = pygame.transform.scale(
+                self.shield_frames[self.shield_frame_index],
+                (32, 32)
+            )
+            screen.blit(frame, shield)
     
-    @property
-    def dj_duration(self):
-        return self.double_jump.duration
-    
-    @property
-    def shield_active(self):
-        return self.shield.active
-    
-    @property
-    def shield_hits(self):
-        return self.shield.hits
-    
-    @shield_hits.setter
-    def shield_hits(self, value):
-        self.shield.hits = value
-    
-    @property
-    def max_shield_hits(self):
-        return self.shield.max_hits
-    
-    @max_shield_hits.setter
-    def max_shield_hits(self, value):
-        self.shield.max_hits = value
-    
-    @property
-    def multiplier_active(self):
-        return self.multiplier.active
-    
-    @property
-    def multiplier_timer(self):
-        return self.multiplier.timer
-    
-    @property
-    def multiplier_duration(self):
-        return self.multiplier.duration
-    
-    @property
-    def multiplier_value(self):
-        return self.multiplier.value
-    
-    @multiplier_value.setter
-    def multiplier_value(self, value):
-        self.multiplier.value = value
-    
-    @property
-    def shield_spawn_interval(self):
-        return self.shield.spawn_interval
-    
-    @shield_spawn_interval.setter
-    def shield_spawn_interval(self, value):
-        self.shield.spawn_interval = value
-    
-    @property
-    def dj_spawn_interval(self):
-        return self.double_jump.spawn_interval
-    
-    @dj_spawn_interval.setter
-    def dj_spawn_interval(self, value):
-        self.double_jump.spawn_interval = value
-    
-    @property
-    def multiplier_spawn_interval(self):
-        return self.multiplier.spawn_interval
-    
-    @multiplier_spawn_interval.setter
-    def multiplier_spawn_interval(self, value):
-        self.multiplier.spawn_interval = value
-    
-    @property
-    def double_jumps(self):
-        return self.double_jump.items
-    
-    @property
-    def shields(self):
-        return self.shield.items
-    
-    @property
-    def multipliers(self):
-        return self.multiplier.items
+    def _draw_multipliers(self, screen):
+        for multiplier in self.multipliers:
+            frame = pygame.transform.scale(
+                self.multiplier_frames[self.multiplier_frame_index],
+                (32, 32)
+            )
+            screen.blit(frame, multiplier)

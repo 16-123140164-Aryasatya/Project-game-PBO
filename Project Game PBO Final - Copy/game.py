@@ -2,243 +2,29 @@ import pygame
 import sys
 import json
 import os
-from abc import ABC, abstractmethod
 from player import Player
 from obstacle_manager import ObstacleManager
-from coin_manager import CoinManager
+from coin_manager import coinmanager
 from powerup_manager import PowerupManager
-
-class GameState(ABC):
-    @abstractmethod
-    def handle_events(self, event):
-        pass
-    
-    @abstractmethod
-    def update(self, dt):
-        pass
-    
-    @abstractmethod
-    def render(self):
-        pass
-
-class MenuState(GameState):
-    def __init__(self, game):
-        self.game = game
-        
-    def handle_events(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mouse_pos = pygame.mouse.get_pos()
-            if self.game.start_button_rect.collidepoint(mouse_pos):
-                self.game.change_state(GameplayState(self.game))
-                self.game.play_gameplay_music()
-                self.game.reset_game()
-            elif self.game.shop_rect.collidepoint(mouse_pos):
-                self.game.change_state(ShopState(self.game))
-            elif self.game.setting_rect.collidepoint(mouse_pos):
-                self.game.change_state(SettingState(self.game))
-            elif self.game.reset_rect.collidepoint(mouse_pos):
-                self.game.reset_data()
-    
-    def update(self, dt):
-        pass
-    
-    def render(self):
-        self.game.screen.blit(self.game.bg_img, (0, 0))
-        self.game.screen.blit(self.game.start_img, self.game.start_button_rect)
-        self.game.screen.blit(self.game.shop_img, self.game.shop_rect)
-        self.game.screen.blit(self.game.setting_img, self.game.setting_rect)
-        self.game.screen.blit(self.game.reset_img, self.game.reset_rect)
-        
-        self.game.screen.blit(
-            self.game.font.render(f"High Score: {int(self.game.save_data['high_score'])}", True, (255, 255, 255)), 
-            (10, 10)
-        )
-        self.game.screen.blit(
-            self.game.font.render(f"Total Coins: {self.game.save_data['total_coin']}", True, (255, 255, 0)), 
-            (10, 40)
-        )
-
-class GameplayState(GameState):
-    def __init__(self, game):
-        self.game = game
-        
-    def handle_events(self, event):
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_DOWN:
-                self.game.player.start_roll()
-            elif event.key in (pygame.K_SPACE, pygame.K_UP):
-                self.game.player.jump()
-            elif event.key == pygame.K_s:
-                self.game.player.attack()
-            elif event.key == pygame.K_ESCAPE:
-                self.game.change_state(MenuState(self.game))
-                self.game.play_menu_music()
-            elif event.key == pygame.K_q:
-                self.game.settings["hitbox_visible"] = not self.game.settings["hitbox_visible"]
-    
-    def update(self, dt):
-        self.game.player.update(dt)
-        self.game.obstacle_manager.update(dt)
-        self.game.coin_manager.update(dt)
-        self.game.powerup_manager.update(dt)
-        self.game.check_collisions()
-        
-        if self.game.player.score_timer >= self.game.player.score_interval:
-            self.game.player.score_timer = 0
-            self.game.player.score += self.game.powerup_manager.multiplier_value
-    
-    def render(self):
-        self.game._render_gameplay()
-
-class ShopState(GameState):
-    def __init__(self, game):
-        self.game = game
-        
-    def handle_events(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mouse_pos = pygame.mouse.get_pos()
-            back_btn, buy_buttons = self.draw_shop()
-            
-            if back_btn.collidepoint(mouse_pos):
-                self.game.change_state(MenuState(self.game))
-            else:
-                for item, btn_rect in buy_buttons:
-                    if btn_rect.collidepoint(mouse_pos):
-                        self.game.buy_item(item)
-                        self.game.play_collectible_sound()
-                        break
-    
-    def update(self, dt):
-        pass
-    
-    def render(self):
-        self.draw_shop()
-    
-    def draw_shop(self):
-        self.game.screen.blit(self.game.bg_img, (0, 0))
-        overlay = pygame.Surface((self.game.WIDTH, self.game.HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
-        self.game.screen.blit(overlay, (0, 0))
-        
-        coins_text = self.game.font.render(f"Coins: {self.game.save_data['total_coin']}", True, (255, 255, 0))
-        self.game.screen.blit(coins_text, (self.game.WIDTH - 150, 20))
-        
-        title = self.game.font.render("SHOP", True, (255, 255, 255))
-        self.game.screen.blit(title, (self.game.WIDTH//2 - title.get_width()//2, 50))
-        
-        back_btn = pygame.Rect(20, 20, 80, 40)
-        pygame.draw.rect(self.game.screen, (200, 50, 50), back_btn)
-        self.game.screen.blit(self.game.font.render("Back", True, (255, 255, 255)), (back_btn.x + 20, back_btn.y + 10))
-        
-        buttons = []
-        y_pos = 100
-        
-        for item, data in self.game.shop_items.items():
-            img = None
-            if item == "shield":
-                img = self.game.powerup_manager.shield_frames[0]
-            elif item == "double_jump":
-                img = self.game.powerup_manager.dj_frames[0]
-            else:
-                img = self.game.powerup_manager.multiplier_frames[0]
-            
-            img = pygame.transform.scale(img, (50, 50))
-            self.game.screen.blit(img, (50, y_pos))
-            
-            self.game.screen.blit(self.game.font.render(f"{item.replace('_', ' ').title()}", True, (255, 255, 255)), (120, y_pos))
-            self.game.screen.blit(self.game.font.render(f"Lvl: {data['level']}/{data['max_level']}", True, (200, 200, 200)), (120, y_pos + 25))
-            
-            if data['level'] < data['max_level']:
-                btn_rect = pygame.Rect(self.game.WIDTH - 150, y_pos + 10, 120, 40)
-                btn_color = (50, 200, 50) if self.game.save_data['total_coin'] >= data['price'] else (100, 100, 100)
-                pygame.draw.rect(self.game.screen, btn_color, btn_rect)
-                self.game.screen.blit(self.game.font.render(f"Buy: {data['price']}", True, (255, 255, 255)), (self.game.WIDTH - 140, y_pos + 20))
-                buttons.append((item, btn_rect))
-            
-            y_pos += 80
-        
-        return back_btn, buttons
-
-class SettingState(GameState):
-    def __init__(self, game):
-        self.game = game
-        
-    def handle_events(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mouse_pos = pygame.mouse.get_pos()
-            back_btn, music_btn, sfx_btn = self.draw_settings()
-            
-            if back_btn.collidepoint(mouse_pos):
-                self.game.change_state(MenuState(self.game))
-            elif music_btn.collidepoint(mouse_pos):
-                self.game.toggle_music()
-            elif sfx_btn.collidepoint(mouse_pos):
-                self.game.toggle_sound_effects()
-    
-    def update(self, dt):
-        pass
-    
-    def render(self):
-        self.draw_settings()
-    
-    def draw_settings(self):
-        self.game.screen.blit(self.game.bg_img, (0, 0))
-        overlay = pygame.Surface((self.game.WIDTH, self.game.HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
-        self.game.screen.blit(overlay, (0, 0))
-        
-        title = self.game.font.render("SETTINGS", True, (255, 255, 255))
-        self.game.screen.blit(title, (self.game.WIDTH//2 - title.get_width()//2, 50))
-        
-        back_btn = pygame.Rect(20, 20, 90, 40)
-        pygame.draw.rect(self.game.screen, (200, 50, 50), back_btn)
-        self.game.screen.blit(self.game.font.render("Back", True, (255, 255, 255)), (back_btn.x + 15, back_btn.y + 10))
-
-        music_btn = pygame.Rect(self.game.WIDTH//2 - 100, 120, 260, 50)
-        btn_color = (50, 200, 50) if self.game.settings["music_enabled"] else (200, 50, 50)
-        pygame.draw.rect(self.game.screen, btn_color, music_btn)
-        status = "ON" if self.game.settings["music_enabled"] else "OFF"
-        self.game.screen.blit(self.game.font.render(f"Music:            {status}", True, (255, 255, 255)), 
-                        (music_btn.x + 50, music_btn.y + 15))
-        
-        sfx_btn = pygame.Rect(self.game.WIDTH//2 - 100, 190, 260, 50)
-        btn_color = (50, 200, 50) if self.game.settings["sound_effects_enabled"] else (200, 50, 50)
-        pygame.draw.rect(self.game.screen, btn_color, sfx_btn)
-        status = "ON" if self.game.settings["sound_effects_enabled"] else "OFF"
-        self.game.screen.blit(self.game.font.render(f"Sound Effects: {status}", True, (255, 255, 255)), 
-                        (sfx_btn.x + 30, sfx_btn.y + 15))
-        
-        hitbox_text = self.game.font.render("Press Q in-game to toggle hitboxes", True, (255, 255, 255))
-        self.game.screen.blit(hitbox_text, (self.game.WIDTH//2 - hitbox_text.get_width()//2, 260))
-        
-        return back_btn, music_btn, sfx_btn
 
 class Game:
     # Class constants
     DEBUG_HITBOX = True
     WIDTH, HEIGHT = 620, 360
     SAVE_FILE = "save_data.json"
+    MENU, GAMEPLAY, SHOP, SETTING = 0, 1, 2, 3
 
     def __init__(self):
         self._initialize_pygame()
+        self._setup_game_components()
+        self._setup_constants()
+        self._initialize_game_components()
         self._load_assets()
         self._setup_buttons()
         self._load_save_data()
         self.load_sounds()  
         self._setup_settings()
-        
-        # Initialize game objects
-        self.player = Player(self)
-        self.obstacle_manager = ObstacleManager(self)
-        self.coin_manager = CoinManager(self)
-        self.powerup_manager = PowerupManager(self)
-        
-        # Set initial state
-        self.current_state = MenuState(self)
-        self.running = True
-
-    def change_state(self, new_state):
-        self.current_state = new_state
+        self.play_menu_music()
 
     def _initialize_pygame(self):
         pygame.init()
@@ -248,6 +34,49 @@ class Game:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont(None, 36)
 
+    def _setup_game_components(self):
+        """Initialize all game components"""
+        self.game_state = self.MENU
+        self.running = True
+        
+        # Initialize game objects
+        self.player = Player(self)
+        self.obstacle_manager = ObstacleManager(self)
+        self.coin_manager = coinmanager(self)
+        self.powerup_manager = PowerupManager(self)
+        
+        # Load sounds and settings
+        self.load_sounds()
+        self._setup_settings()
+
+    def _setup_constants(self):
+        self.WIDTH, self.HEIGHT = 620, 360
+        self.SAVE_FILE = "save_data.json"
+        self.MENU, self.GAMEPLAY, self.SHOP, self.SETTING = 0, 1, 2, 3
+        self.DEBUG_HITBOX = True
+        
+    def _initialize_game_components(self):
+        self.game_state = self.MENU
+        self.running = True
+        self._initialize_sound_system()
+        self._setup_settings()
+        
+        self.player = Player(self)
+        self.obstacle_manager = ObstacleManager(self)
+        self.coin_manager = coinmanager(self)
+        self.powerup_manager = PowerupManager(self)
+        
+    def _initialize_sound_system(self):
+        pygame.mixer.init()
+        self.sounds = {}
+        
+    def _setup_settings(self):
+        self.settings = {
+            "music_enabled": True,
+            "sound_effects_enabled": True,
+            "hitbox_visible": self.DEBUG_HITBOX
+        }
+        
     def _load_assets(self):
         try:
             self.bg_img = pygame.image.load("assets/menu_start.png").convert()
@@ -281,13 +110,6 @@ class Game:
                 if "shop_items" in data:
                     self.shop_items.update(data["shop_items"])
     
-    def _setup_settings(self):
-        self.settings = {
-            "music_enabled": True,
-            "sound_effects_enabled": True,
-            "hitbox_visible": self.DEBUG_HITBOX
-        }
-
     def load_sounds(self):
         self.sounds = {}
         try:
@@ -303,9 +125,14 @@ class Game:
                     self.sounds[name].set_volume(0.7)
                 else:
                     print(f"Warning: Sound file {path} not found!")
+                    # Create silent sound as fallback
                     self.sounds[name] = pygame.mixer.Sound(buffer=bytearray(1000))
         except Exception as e:
+            print(f"Critical sound error: {str(e)}")
+
+        except Exception as e:
             print(f"Error loading sounds: {e}")
+            # Fallback jika file tidak ada
             self.sounds = {
                 'menu_music': None,
                 'gameplay_music': None,
@@ -350,10 +177,11 @@ class Game:
         self.powerup_manager.multiplier_spawn_interval = max(8000, 15000 - (self.shop_items["multiplier"]["level"] * 2000))
     
     def check_collisions(self):
-        for obstacle, o_type in self.obstacle_manager.obstacles[:]:
-            if self.player.rect.inflate(-80, -30).colliderect(obstacle):
+        # Update untuk obstacle berbasis class
+        for obstacle in self.obstacle_manager.obstacles[:]:
+            if self.player.rect.inflate(-80, -30).colliderect(obstacle.rect):
                 if self.powerup_manager.shield_active:
-                    self.obstacle_manager.obstacles.remove((obstacle, o_type))
+                    self.obstacle_manager.obstacles.remove(obstacle)
                     self.powerup_manager.shield_hits += 1
                     if self.powerup_manager.shield_hits >= self.powerup_manager.max_shield_hits:
                         self.powerup_manager.shield_active = False
@@ -362,6 +190,7 @@ class Game:
                     self.game_over()
                     break
         
+        # Update untuk coin collision
         for coin in self.coin_manager.coins[:]:
             if self.player.rect.inflate(-80, -30).colliderect(coin):
                 self.coin_manager.coins.remove(coin)
@@ -373,15 +202,107 @@ class Game:
             self.save_data["high_score"] = self.player.score
         self.save_data["total_coin"] += self.player.coin_score
         self.save_game()
-        self.change_state(MenuState(self))
+        self.game_state = self.MENU
         self.play_menu_music()
+    
+    def update(self, dt):
+        if self.game_state == self.GAMEPLAY:
+            self.player.update(dt)
+            self.obstacle_manager.update(dt)
+            self.coin_manager.update(dt)
+            self.powerup_manager.update(dt)
+            self.check_collisions()
+            
+            if self.player.score_timer >= self.player.score_interval:
+                self.player.score_timer = 0
+                self.player.score += self.powerup_manager.multiplier_value
+    
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            
+            if self.game_state == self.MENU:
+                self._handle_menu_events(event)
+            elif self.game_state == self.GAMEPLAY:
+                self._handle_gameplay_events(event)
+            elif self.game_state == self.SHOP:
+                self._handle_shop_events(event)
+            elif self.game_state == self.SETTING:
+                self._handle_settings_events(event)
+    
+    def _handle_menu_events(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mouse_pos = pygame.mouse.get_pos()
+            if self.start_button_rect.collidepoint(mouse_pos):
+                self.game_state = self.GAMEPLAY
+                self.play_gameplay_music()
+                self.reset_game()
+            elif self.shop_rect.collidepoint(mouse_pos):
+                self.game_state = self.SHOP
+            elif self.setting_rect.collidepoint(mouse_pos):
+                self.game_state = self.SETTING
+            elif self.reset_rect.collidepoint(mouse_pos):
+                self.reset_data()
+    
+    def _handle_gameplay_events(self, event):
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_DOWN:
+                self.player.start_roll()
+            elif event.key in (pygame.K_SPACE, pygame.K_UP):
+                self.player.jump()
+            elif event.key == pygame.K_s:
+                self.player.attack()
+            elif event.key == pygame.K_ESCAPE:
+                self.game_state = self.MENU
+                self.play_menu_music()
+            elif event.key == pygame.K_q:
+                self.settings["hitbox_visible"] = not self.settings["hitbox_visible"]
+    
+    def _handle_shop_events(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mouse_pos = pygame.mouse.get_pos()
+            back_btn, buy_buttons = self.draw_shop()
+            
+            if back_btn.collidepoint(mouse_pos):
+                self.game_state = self.MENU
+            else:
+                for item, btn_rect in buy_buttons:
+                    if btn_rect.collidepoint(mouse_pos):
+                        self.buy_item(item)
+                        self.play_collectible_sound()
+                        break
+
+    def _handle_settings_events(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mouse_pos = pygame.mouse.get_pos()
+            back_btn, music_btn, sfx_btn = self.draw_settings()
+            
+            if back_btn.collidepoint(mouse_pos):
+                self.game_state = self.MENU
+            elif music_btn.collidepoint(mouse_pos):
+                self.toggle_music()
+            elif sfx_btn.collidepoint(mouse_pos):
+                self.toggle_sound_effects()
+    
+    def buy_item(self, item):
+        if self.save_data['total_coin'] >= self.shop_items[item]['price']:
+            self.save_data['total_coin'] -= self.shop_items[item]['price']
+            self.shop_items[item]['level'] += 1
+            self.shop_items[item]['price'] = int(self.shop_items[item]['price'] * 1.5)
+            self.save_game()
+            
+            self.draw_shop()
+            pygame.display.flip()
+            pygame.time.delay(100)
     
     def toggle_music(self):
         self.settings["music_enabled"] = not self.settings["music_enabled"]
+
         if self.settings["music_enabled"]:
-            if isinstance(self.current_state, MenuState):
+            if self.game_state == self.MENU:
                 self.play_menu_music()
-            elif isinstance(self.current_state, GameplayState):
+            elif self.game_state == self.GAMEPLAY:
                 self.play_gameplay_music()
         else:
             pygame.mixer.stop()
@@ -392,11 +313,15 @@ class Game:
     def play_menu_music(self):
         if not self.settings["music_enabled"]:
             return
+        
         try:
             if hasattr(self, 'sounds') and 'menu_music' in self.sounds:
                 pygame.mixer.stop()
                 self.sounds['menu_music'].set_volume(0.7)
                 self.sounds['menu_music'].play(loops=-1, fade_ms=1500)
+                print("Menu music started successfully")  # Debug
+            else:
+                print("Menu sound not loaded!")  # Debug
         except Exception as e:
             print(f"Error playing menu music: {str(e)}")
 
@@ -411,13 +336,110 @@ class Game:
             return
         self.sounds['collectible'].play()
     
-    def buy_item(self, item):
-        if self.save_data['total_coin'] >= self.shop_items[item]['price']:
-            self.save_data['total_coin'] -= self.shop_items[item]['price']
-            self.shop_items[item]['level'] += 1
-            self.shop_items[item]['price'] = int(self.shop_items[item]['price'] * 1.5)
-            self.save_game()
-            self.apply_upgrades()
+    def draw_shop(self):
+        self.screen.blit(self.bg_img, (0, 0))
+        overlay = pygame.Surface((self.WIDTH, self.HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        coins_text = self.font.render(f"Coins: {self.save_data['total_coin']}", True, (255, 255, 0))
+        self.screen.blit(coins_text, (self.WIDTH - 150, 20))
+        
+        title = self.font.render("SHOP", True, (255, 255, 255))
+        self.screen.blit(title, (self.WIDTH//2 - title.get_width()//2, 50))
+        
+        back_btn = pygame.Rect(20, 20, 80, 40)
+        pygame.draw.rect(self.screen, (200, 50, 50), back_btn)
+        self.screen.blit(self.font.render("Back", True, (255, 255, 255)), (back_btn.x + 20, back_btn.y + 10))
+        
+        buttons = []
+        y_pos = 100
+        
+        for item, data in self.shop_items.items():
+            img = None
+            if item == "shield":
+                img = self.powerup_manager.shield_frames[0]
+            elif item == "double_jump":
+                img = self.powerup_manager.dj_frames[0]
+            else:
+                img = self.powerup_manager.multiplier_frames[0]
+            
+            img = pygame.transform.scale(img, (50, 50))
+            self.screen.blit(img, (50, y_pos))
+            
+            self.screen.blit(self.font.render(f"{item.replace('_', ' ').title()}", True, (255, 255, 255)), (120, y_pos))
+            self.screen.blit(self.font.render(f"Lvl: {data['level']}/{data['max_level']}", True, (200, 200, 200)), (120, y_pos + 25))
+            
+            if data['level'] < data['max_level']:
+                btn_rect = pygame.Rect(self.WIDTH - 150, y_pos + 10, 120, 40)
+                btn_color = (50, 200, 50) if self.save_data['total_coin'] >= data['price'] else (100, 100, 100)
+                pygame.draw.rect(self.screen, btn_color, btn_rect)
+                self.screen.blit(self.font.render(f"Buy: {data['price']}", True, (255, 255, 255)), (self.WIDTH - 140, y_pos + 20))
+                buttons.append((item, btn_rect))
+            
+            y_pos += 80
+        
+        return back_btn, buttons
+    
+    def draw_settings(self):
+        self.screen.blit(self.bg_img, (0, 0))
+        overlay = pygame.Surface((self.WIDTH, self.HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        title = self.font.render("SETTINGS", True, (255, 255, 255))
+        self.screen.blit(title, (self.WIDTH//2 - title.get_width()//2, 50))
+        
+        back_btn = pygame.Rect(20, 20, 90, 40)
+        pygame.draw.rect(self.screen, (200, 50, 50), back_btn)
+        self.screen.blit(self.font.render("Back", True, (255, 255, 255)), (back_btn.x + 15, back_btn.y + 10))
+
+        music_btn = pygame.Rect(self.WIDTH//2 - 100, 120, 260, 50)
+        btn_color = (50, 200, 50) if self.settings["music_enabled"] else (200, 50, 50)
+        pygame.draw.rect(self.screen, btn_color, music_btn)
+        status = "ON" if self.settings["music_enabled"] else "OFF"
+        self.screen.blit(self.font.render(f"Music:            {status}", True, (255, 255, 255)), 
+                        (music_btn.x + 50, music_btn.y + 15))
+        
+        sfx_btn = pygame.Rect(self.WIDTH//2 - 100, 190, 260, 50)
+        btn_color = (50, 200, 50) if self.settings["sound_effects_enabled"] else (200, 50, 50)
+        pygame.draw.rect(self.screen, btn_color, sfx_btn)
+        status = "ON" if self.settings["sound_effects_enabled"] else "OFF"
+        self.screen.blit(self.font.render(f"Sound Effects: {status}", True, (255, 255, 255)), 
+                        (sfx_btn.x + 30, sfx_btn.y + 15))
+        
+        hitbox_text = self.font.render("Press Q in-game to toggle hitboxes", True, (255, 255, 255))
+        self.screen.blit(hitbox_text, (self.WIDTH//2 - hitbox_text.get_width()//2, 260))
+        
+        return back_btn, music_btn, sfx_btn
+    
+    def render(self):
+        if self.game_state == self.MENU:
+            self._render_menu()
+        elif self.game_state == self.SHOP:
+            self.draw_shop()
+        elif self.game_state == self.SETTING:
+            self.draw_settings()
+        elif self.game_state == self.GAMEPLAY:
+            self._render_gameplay()
+        
+        pygame.display.flip()
+    
+    def _render_menu(self):
+        self.screen.blit(self.bg_img, (0, 0))
+        self.screen.blit(self.start_img, self.start_button_rect)
+        self.screen.blit(self.shop_img, self.shop_rect)
+        self.screen.blit(self.setting_img, self.setting_rect)
+        self.screen.blit(self.reset_img, self.reset_rect)
+        
+        self.screen.blit(
+            self.font.render(f"High Score: {int(self.save_data['high_score'])}", True, (255, 255, 255)), 
+            (10, 10)
+        )
+        self.screen.blit(
+            self.font.render(f"Total Coins: {self.save_data['total_coin']}", True, (255, 255, 0)), 
+            (10, 40)
+        )
     
     def _render_gameplay(self):
         self.screen.blit(self.bg_img, (self.player.bg_scroll_x - self.WIDTH, 0))
@@ -461,9 +483,9 @@ class Game:
             pygame.draw.rect(self.screen, (255, 0, 0), self.player.rect.inflate(-80, -30), 2)
             for c in self.coin_manager.coins:
                 pygame.draw.rect(self.screen, (255, 255, 0), c, 2)
-            for o, o_type in self.obstacle_manager.obstacles:
-                color = (255, 255, 255) if o_type == "arrow" else (0, 0, 255)
-                pygame.draw.rect(self.screen, color, o, 2)
+            # Update untuk obstacle berbasis class
+            for obstacle in self.obstacle_manager.obstacles:
+                color = (255, 255, 255) if obstacle.type == "arrow" else (0, 0, 255)
             for dj in self.powerup_manager.double_jumps:
                 pygame.draw.rect(self.screen, (0, 255, 0), dj, 2)
             for s in self.powerup_manager.shields:
@@ -474,19 +496,9 @@ class Game:
     def run(self):
         while self.running:
             dt = self.clock.tick(60)
-            
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.running = False
-                self.current_state.handle_events(event)
-            
-            self.current_state.update(dt)
-            self.current_state.render()
-            pygame.display.flip()
+            self.handle_events()
+            self.update(dt)
+            self.render()
         
         pygame.quit()
         sys.exit()
-
-if __name__ == "__main__":
-    game = Game()
-    game.run()
