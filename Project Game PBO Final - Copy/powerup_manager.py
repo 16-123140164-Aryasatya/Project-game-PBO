@@ -1,249 +1,257 @@
 import pygame
 import random
+from abc import ABC, abstractmethod
+
+class Powerup(ABC):
+    def __init__(self, game, frames, spawn_interval):
+        self._game = game
+        self._frames = frames
+        self._spawn_interval = spawn_interval
+        self._spawn_timer = 0
+        self._active = False
+        self._frame_index = 0
+        self._animation_timer = 0
+        self._animation_speed = 100
+        self._instances = []
+    
+    @abstractmethod
+    def _activate_effect(self):
+        """Abstract method to define powerup effect"""
+        pass
+    
+    @abstractmethod
+    def _update_active(self):
+        """Abstract method to update active powerup state"""
+        pass
+    
+    def update(self, dt):
+        """Update powerup state"""
+        self._update_spawning(dt)
+        self._update_instances(dt)
+        self._update_animation(dt)
+        if self._active:
+            self._update_active()
+    
+    def _update_spawning(self, dt):
+        """Update powerup spawning logic"""
+        if not self._active:
+            self._spawn_timer += dt
+            if self._spawn_timer >= self._spawn_interval:
+                self._spawn_instance()
+                self._spawn_timer = 0
+    
+    def _spawn_instance(self):
+        """Spawn a new powerup instance"""
+        rect = pygame.Rect(
+            self._game.WIDTH + random.randint(0, 100),
+            self._game.player.ground_level - random.randint(40, 80),
+            self._frames[0].get_width(),
+            self._frames[0].get_height()
+        )
+        self._instances.append(rect)
+    
+    def _update_instances(self, dt):
+        """Update all powerup instances"""
+        for instance in self._instances[:]:
+            instance.x -= self._game.obstacle_manager.obstacle_speed
+            
+            if instance.right < 0:
+                self._instances.remove(instance)
+                continue
+            
+            if self._game.player.rect.inflate(-80, -30).colliderect(instance):
+                self._instances.remove(instance)
+                self._activate_effect()
+                self._game.play_collectible_sound()
+    
+    def _update_animation(self, dt):
+        """Update animation frames"""
+        self._animation_timer += dt
+        if self._animation_timer >= self._animation_speed:
+            self._animation_timer = 0
+            self._frame_index = (self._frame_index + 1) % len(self._frames)
+    
+    def draw(self, screen):
+        """Draw all powerup instances"""
+        for instance in self._instances:
+            frame = pygame.transform.scale(
+                self._frames[self._frame_index],
+                (32, 32)
+            )
+            screen.blit(frame, instance)
+    
+    @property
+    def active(self):
+        """Check if powerup is active"""
+        return self._active
+    
+    @property
+    def instances(self):
+        """Get powerup instances (read-only)"""
+        return self._instances
+
+class DoubleJumpPowerup(Powerup):
+    def __init__(self, game, frames):
+        super().__init__(game, frames, 7000)
+        self._duration = 30000
+        self._timer = 0
+    
+    def _activate_effect(self):
+        """Activate double jump effect"""
+        self._active = True
+        self._timer = pygame.time.get_ticks()
+        self._game.player.enable_double_jump()
+    
+    def _update_active(self):
+        """Update active double jump state"""
+        elapsed = pygame.time.get_ticks() - self._timer
+        if elapsed >= self._duration:
+            self._active = False
+            self._game.player.disable_double_jump()
+
+class ShieldPowerup(Powerup):
+    def __init__(self, game, frames):
+        super().__init__(game, frames, 10000)
+        self._hits = 0
+        self._max_hits = 2
+    
+    def _activate_effect(self):
+        """Activate shield effect"""
+        self._active = True
+        self._hits = 0
+        self._game.player.activate_shield()
+    
+    def register_hit(self):
+        """Register a shield hit"""
+        if self._active:
+            self._hits += 1
+            if self._hits >= self._max_hits:
+                self._active = False
+                self._game.player.deactivate_shield()
+            return True
+        return False
+    
+    @property
+    def hits_remaining(self):
+        """Get remaining shield hits"""
+        return self._max_hits - self._hits
+    
+    def _update_active(self):
+        """Shield doesn't time out, only deactivates on hits"""
+        pass
+
+class MultiplierPowerup(Powerup):
+    def __init__(self, game, frames):
+        super().__init__(game, frames, 12000)
+        self._duration = 10000
+        self._timer = 0
+        self._value = 1
+    
+    def _activate_effect(self):
+        """Activate score multiplier"""
+        self._active = True
+        self._timer = pygame.time.get_ticks()
+        self._value = 2
+    
+    def _update_active(self):
+        """Update active multiplier state"""
+        elapsed = pygame.time.get_ticks() - self._timer
+        if elapsed >= self._duration:
+            self._active = False
+            self._value = 1
+    
+    @property
+    def value(self):
+        """Get current multiplier value"""
+        return self._value
 
 class PowerupManager:
     def __init__(self, game):
-        self.game = game
-        self.reset()
+        self._game = game
         self._load_assets()
+        self.reset()
     
     def _load_assets(self):
-        self.dj_frames = self._load_frames(
+        """Load all powerup assets"""
+        self._dj_frames = self._load_frames(
             pygame.image.load("assets/double_jump.png").convert_alpha(),
             128, 32, 4
         )
-        self.shield_frames = self._load_frames(
+        self._shield_frames = self._load_frames(
             pygame.image.load("assets/shield.png").convert_alpha(),
             128, 32, 4
         )
-        self.multiplier_frames = self._load_frames(
+        self._multiplier_frames = self._load_frames(
             pygame.image.load("assets/multiplier.png").convert_alpha(),
             128, 32, 4
         )
-        self.enemy_frames = self._load_frames(
+        self._enemy_frames = self._load_frames(
             pygame.image.load("assets/obstacle_enemy.png").convert_alpha(),
             135, 64, 4
         )
     
     def _load_frames(self, spritesheet, total_width, height, frame_count):
+        """Helper method to load animation frames"""
         frame_width = total_width // frame_count
         return [spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, height)) 
                 for i in range(frame_count)]
     
     def reset(self):
-        self.double_jumps = []
-        self.shields = []
-        self.multipliers = []
+        """Reset all powerup states"""
+        self._double_jump = DoubleJumpPowerup(self._game, self._dj_frames)
+        self._shield = ShieldPowerup(self._game, self._shield_frames)
+        self._multiplier = MultiplierPowerup(self._game, self._multiplier_frames)
         
-        self.dj_spawn_timer = 0
-        self.dj_spawn_interval = 7000
-        self.shield_spawn_timer = 0
-        self.shield_spawn_interval = 10000
-        self.multiplier_spawn_timer = 0
-        self.multiplier_spawn_interval = 12000
-        
-        self.dj_active = False
-        self.dj_timer = 0
-        self.dj_duration = 30000
-        
-        self.shield_active = False
-        self.shield_hits = 0
-        self.max_shield_hits = 2
-        
-        self.multiplier_active = False
-        self.multiplier_timer = 0
-        self.multiplier_duration = 10000
-        self.multiplier_value = 1
-        
-        self.dj_frame_index = 0
-        self.dj_animation_timer = 0
-        self.dj_animation_speed = 100
-        
-        self.shield_frame_index = 0
-        self.shield_animation_timer = 0
-        self.shield_animation_speed = 100
-        
-        self.multiplier_frame_index = 0
-        self.multiplier_animation_timer = 0
-        self.multiplier_animation_speed = 100
-        
-        self.enemy_frame_index = 0
-        self.enemy_animation_timer = 0
-        self.enemy_animation_speed = 150
+        self._enemy_frame_index = 0
+        self._enemy_animation_timer = 0
+        self._enemy_animation_speed = 150
     
     def update(self, dt):
-        self._update_animations(dt)
-        self._spawn_powerups(dt)
-        self._update_active_powerups()
-    
-    def _update_animations(self, dt):
-        self._update_dj_animation(dt)
-        self._update_shield_animation(dt)
-        self._update_multiplier_animation(dt)
+        """Update all powerups"""
+        self._double_jump.update(dt)
+        self._shield.update(dt)
+        self._multiplier.update(dt)
         self._update_enemy_animation(dt)
     
-    def _update_dj_animation(self, dt):
-        self.dj_animation_timer += dt
-        if self.dj_animation_timer >= self.dj_animation_speed:
-            self.dj_animation_timer = 0
-            self.dj_frame_index = (self.dj_frame_index + 1) % len(self.dj_frames)
-    
-    def _update_shield_animation(self, dt):
-        self.shield_animation_timer += dt
-        if self.shield_animation_timer >= self.shield_animation_speed:
-            self.shield_animation_timer = 0
-            self.shield_frame_index = (self.shield_frame_index + 1) % len(self.shield_frames)
-    
-    def _update_multiplier_animation(self, dt):
-        self.multiplier_animation_timer += dt
-        if self.multiplier_animation_timer >= self.multiplier_animation_speed:
-            self.multiplier_animation_timer = 0
-            self.multiplier_frame_index = (self.multiplier_frame_index + 1) % len(self.multiplier_frames)
-    
     def _update_enemy_animation(self, dt):
-        self.enemy_animation_timer += dt
-        if self.enemy_animation_timer >= self.enemy_animation_speed:
-            self.enemy_animation_timer = 0
-            self.enemy_frame_index = (self.enemy_frame_index + 1) % len(self.enemy_frames)
-    
-    def _spawn_powerups(self, dt):
-        if not self.dj_active:
-            self._spawn_double_jump(dt)
-        
-        if not self.shield_active:
-            self._spawn_shield(dt)
-        
-        if not self.multiplier_active:
-            self._spawn_multiplier(dt)
-        
-        self._update_powerups()
-    
-    def _spawn_double_jump(self, dt):
-        self.dj_spawn_timer += dt
-        if self.dj_spawn_timer >= self.dj_spawn_interval:
-            rect = pygame.Rect(
-                self.game.WIDTH + random.randint(0, 100), 
-                self.game.player.ground_level - random.randint(40, 80), 
-                self.dj_frames[0].get_width(), 
-                self.dj_frames[0].get_height()
-            )
-            self.double_jumps.append(rect)
-            self.dj_spawn_timer = 0
-    
-    def _spawn_shield(self, dt):
-        self.shield_spawn_timer += dt
-        if self.shield_spawn_timer >= self.shield_spawn_interval:
-            rect = pygame.Rect(
-                self.game.WIDTH + random.randint(0, 100), 
-                self.game.player.ground_level - random.randint(40, 80), 
-                self.shield_frames[0].get_width(), 
-                self.shield_frames[0].get_height()
-            )
-            self.shields.append(rect)
-            self.shield_spawn_timer = 0
-    
-    def _spawn_multiplier(self, dt):
-        self.multiplier_spawn_timer += dt
-        if self.multiplier_spawn_timer >= self.multiplier_spawn_interval:
-            rect = pygame.Rect(
-                self.game.WIDTH + random.randint(0, 100), 
-                self.game.player.ground_level - random.randint(40, 80), 
-                self.multiplier_frames[0].get_width(), 
-                self.multiplier_frames[0].get_height()
-            )
-            self.multipliers.append(rect)
-            self.multiplier_spawn_timer = 0
-    
-    def _update_powerups(self):
-        self._update_double_jumps()
-        self._update_shields()
-        self._update_multipliers()
-    
-    def _update_double_jumps(self):
-        for dj in self.double_jumps[:]:
-            dj.x -= self.game.obstacle_manager.obstacle_speed
-            
-            if dj.right < 0:
-                self.double_jumps.remove(dj)
-                continue
-            
-            if self.game.player.rect.inflate(-80, -30).colliderect(dj):
-                self.double_jumps.remove(dj)
-                self.dj_active = True
-                self.dj_timer = pygame.time.get_ticks()
-                self.game.play_collectible_sound()
-    
-    def _update_shields(self):
-        for shield in self.shields[:]:
-            shield.x -= self.game.obstacle_manager.obstacle_speed
-            
-            if shield.right < 0:
-                self.shields.remove(shield)
-                continue
-            
-            if self.game.player.rect.inflate(-80, -30).colliderect(shield):
-                self.shields.remove(shield)
-                self.shield_active = True
-                self.shield_hits = 0
-                self.game.play_collectible_sound()
-    
-    def _update_multipliers(self):
-        for multiplier in self.multipliers[:]:
-            multiplier.x -= self.game.obstacle_manager.obstacle_speed
-            
-            if multiplier.right < 0:
-                self.multipliers.remove(multiplier)
-                continue
-            
-            if self.game.player.rect.inflate(-80, -30).colliderect(multiplier):
-                self.multipliers.remove(multiplier)
-                self.multiplier_active = True
-                self.multiplier_timer = pygame.time.get_ticks()
-                self.multiplier_value = 2
-                self.game.play_collectible_sound()
-    
-    def _update_active_powerups(self):
-        self._update_dj_active()
-        self._update_multiplier_active()
-    
-    def _update_dj_active(self):
-        if self.dj_active:
-            elapsed = pygame.time.get_ticks() - self.dj_timer
-            if elapsed >= self.dj_duration:
-                self.dj_active = False
-    
-    def _update_multiplier_active(self):
-        if self.multiplier_active:
-            elapsed = pygame.time.get_ticks() - self.multiplier_timer
-            if elapsed >= self.multiplier_duration:
-                self.multiplier_active = False
-                self.multiplier_value = 1
+        """Update enemy animation frames"""
+        self._enemy_animation_timer += dt
+        if self._enemy_animation_timer >= self._enemy_animation_speed:
+            self._enemy_animation_timer = 0
+            self._enemy_frame_index = (self._enemy_frame_index + 1) % len(self._enemy_frames)
     
     def draw(self, screen):
-        self._draw_double_jumps(screen)
-        self._draw_shields(screen)
-        self._draw_multipliers(screen)
+        """Draw all powerups"""
+        self._double_jump.draw(screen)
+        self._shield.draw(screen)
+        self._multiplier.draw(screen)
     
-    def _draw_double_jumps(self, screen):
-        for dj in self.double_jumps:
-            frame = pygame.transform.scale(
-                self.dj_frames[self.dj_frame_index],
-                (32, 32)
-            )
-            screen.blit(frame, dj)
+    # Property getters for powerup states
+    @property
+    def double_jump_active(self):
+        return self._double_jump.active
     
-    def _draw_shields(self, screen):
-        for shield in self.shields:
-            frame = pygame.transform.scale(
-                self.shield_frames[self.shield_frame_index],
-                (32, 32)
-            )
-            screen.blit(frame, shield)
+    @property
+    def shield_active(self):
+        return self._shield.active
     
-    def _draw_multipliers(self, screen):
-        for multiplier in self.multipliers:
-            frame = pygame.transform.scale(
-                self.multiplier_frames[self.multiplier_frame_index],
-                (32, 32)
-            )
-            screen.blit(frame, multiplier)
+    @property
+    def multiplier_active(self):
+        return self._multiplier.active
+    
+    @property
+    def multiplier_value(self):
+        return self._multiplier.value
+    
+    @property
+    def shield_hits_remaining(self):
+        return self._shield.hits_remaining
+    
+    @property
+    def enemy_frame_index(self):
+        return self._enemy_frame_index
+    
+    # Methods for shield interaction
+    def register_shield_hit(self):
+        """Register a hit on the shield"""
+        return self._shield.register_hit()

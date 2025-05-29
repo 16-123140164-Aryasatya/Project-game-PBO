@@ -12,6 +12,10 @@ class Player:
         self.normal_hitbox = pygame.Rect(0, 0, 768//8, 64)
         self.roll_hitbox = pygame.Rect(0, 0, 768//8, 32)
         self.attack_hitbox_rect = pygame.Rect(0, 0, 768//8, 64)
+
+        # Powerup states
+        self._has_double_jump = False
+        self._has_shield = False
     
     def _load_sprites(self):
         player_spritesheet = pygame.image.load("assets/player.png").convert_alpha()
@@ -70,6 +74,13 @@ class Player:
         
         # Jumping
         self.has_jumped_once = False
+
+        # Jumping
+        self.has_jumped_once = False
+        
+        # Powerup states
+        self._has_double_jump = False
+        self._has_shield = False
     
     def update(self, dt):
         self._apply_gravity()
@@ -157,7 +168,7 @@ class Player:
         if self.rect.bottom >= self.ground_level:
             self.speed_y = self.jump_power
             self.has_jumped_once = False
-        elif self.game.powerup_manager.dj_active and not self.has_jumped_once:
+        elif self.game.powerup_manager.double_jump_active and not self.has_jumped_once:
             self.speed_y = self.jump_power
             self.has_jumped_once = True
     
@@ -185,3 +196,29 @@ class Player:
             screen.blit(self.roll_frames[self.frame_index], self.rect)
         else:
             screen.blit(self.frames[self.frame_index], self.rect)
+    
+    def enable_double_jump(self):
+        """Enable double jump ability"""
+        self._has_double_jump = True
+    
+    def disable_double_jump(self):
+        """Disable double jump ability"""
+        self._has_double_jump = False
+    
+    def activate_shield(self):
+        """Activate shield protection"""
+        self._has_shield = True
+    
+    def deactivate_shield(self):
+        """Deactivate shield protection"""
+        self._has_shield = False
+    
+    @property
+    def has_double_jump(self):
+        """Check if double jump is active"""
+        return self._has_double_jump
+    
+    @property
+    def has_shield(self):
+        """Check if shield is active"""
+        return self._has_shield

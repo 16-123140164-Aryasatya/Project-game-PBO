@@ -168,13 +168,23 @@ class Game:
         self.apply_upgrades()
     
     def apply_upgrades(self):
-        self.powerup_manager.max_shield_hits = 1 + self.shop_items["shield"]["level"]
-        self.powerup_manager.dj_duration = 20000 + (self.shop_items["double_jump"]["level"] * 10000)
-        self.powerup_manager.multiplier_value = 1 + (0.5 * self.shop_items["multiplier"]["level"])
+        """Apply shop upgrades to powerups"""
+        # Update shield properties through the MultiplierPowerup instance
+        shield_powerup = self.powerup_manager._shield
+        shield_powerup._max_hits = 1 + self.shop_items["shield"]["level"]
         
-        self.powerup_manager.shield_spawn_interval = max(3000, 10000 - (self.shop_items["shield"]["level"] * 1500))
-        self.powerup_manager.dj_spawn_interval = max(5000, 15000 - (self.shop_items["double_jump"]["level"] * 3000))
-        self.powerup_manager.multiplier_spawn_interval = max(8000, 15000 - (self.shop_items["multiplier"]["level"] * 2000))
+        # Update double jump properties through the DoubleJumpPowerup instance
+        dj_powerup = self.powerup_manager._double_jump
+        dj_powerup._duration = 20000 + (self.shop_items["double_jump"]["level"] * 10000)
+        
+        # Update multiplier properties through the MultiplierPowerup instance
+        multiplier_powerup = self.powerup_manager._multiplier
+        multiplier_powerup._value = 1 + (0.5 * self.shop_items["multiplier"]["level"])
+        
+        # Update spawn intervals
+        self.powerup_manager._shield._spawn_interval = max(3000, 10000 - (self.shop_items["shield"]["level"] * 1500))
+        self.powerup_manager._double_jump._spawn_interval = max(5000, 15000 - (self.shop_items["double_jump"]["level"] * 3000))
+        self.powerup_manager._multiplier._spawn_interval = max(8000, 15000 - (self.shop_items["multiplier"]["level"] * 2000))
     
     def check_collisions(self):
         # Update untuk obstacle berbasis class
@@ -182,13 +192,10 @@ class Game:
             if self.player.rect.inflate(-80, -30).colliderect(obstacle.rect):
                 if self.powerup_manager.shield_active:
                     self.obstacle_manager.obstacles.remove(obstacle)
-                    self.powerup_manager.shield_hits += 1
-                    if self.powerup_manager.shield_hits >= self.powerup_manager.max_shield_hits:
-                        self.powerup_manager.shield_active = False
-                    continue
-                else:
-                    self.game_over()
-                    break
+                    if self.powerup_manager.register_shield_hit():
+                        continue
+                self.game_over()
+                break
         
         # Update untuk coin collision
         for coin in self.coin_manager.coins[:]:
@@ -358,11 +365,11 @@ class Game:
         for item, data in self.shop_items.items():
             img = None
             if item == "shield":
-                img = self.powerup_manager.shield_frames[0]
+                img = self.powerup_manager._shield._frames[0]
             elif item == "double_jump":
-                img = self.powerup_manager.dj_frames[0]
+                img = self.powerup_manager._double_jump._frames[0]
             else:
-                img = self.powerup_manager.multiplier_frames[0]
+                img = self.powerup_manager._multiplier._frames[0]
             
             img = pygame.transform.scale(img, (50, 50))
             self.screen.blit(img, (50, y_pos))
@@ -459,23 +466,26 @@ class Game:
             (10, 40)
         )
         
-        if self.powerup_manager.dj_active:
-            elapsed = pygame.time.get_ticks() - self.powerup_manager.dj_timer
+        if self.powerup_manager.double_jump_active:
+            dj_powerup = self.powerup_manager._double_jump
+            elapsed = pygame.time.get_ticks() - dj_powerup._timer
             self.screen.blit(
-                self.font.render(f"Double Jump: {(self.powerup_manager.dj_duration - elapsed)//1000}s", True, (0, 255, 0)), 
+                self.font.render(f"Double Jump: {(dj_powerup._duration - elapsed)//1000}s", True, (0, 255, 0)), 
                 (self.WIDTH - 220, 10)
             )
         
         if self.powerup_manager.shield_active:
+            shield_powerup = self.powerup_manager._shield
             self.screen.blit(
-                self.font.render(f"Shield: {self.powerup_manager.max_shield_hits - self.powerup_manager.shield_hits} hits", True, (128, 128, 255)), 
+                self.font.render(f"Shield: {shield_powerup.hits_remaining} hits", True, (128, 128, 255)), 
                 (self.WIDTH - 220, 40)
             )
         
         if self.powerup_manager.multiplier_active:
-            elapsed = pygame.time.get_ticks() - self.powerup_manager.multiplier_timer
+            multiplier_powerup = self.powerup_manager._multiplier
+            elapsed = pygame.time.get_ticks() - multiplier_powerup._timer
             self.screen.blit(
-                self.font.render(f"Multiplier: {(self.powerup_manager.multiplier_duration - elapsed)//1000}s", True, (255, 215, 0)), 
+                self.font.render(f"Multiplier: {(multiplier_powerup._duration - elapsed)//1000}s", True, (255, 215, 0)), 
                 (self.WIDTH - 220, 70)
             )
         
@@ -483,14 +493,14 @@ class Game:
             pygame.draw.rect(self.screen, (255, 0, 0), self.player.rect.inflate(-80, -30), 2)
             for c in self.coin_manager.coins:
                 pygame.draw.rect(self.screen, (255, 255, 0), c, 2)
-            # Update untuk obstacle berbasis class
             for obstacle in self.obstacle_manager.obstacles:
                 color = (255, 255, 255) if obstacle.type == "arrow" else (0, 0, 255)
-            for dj in self.powerup_manager.double_jumps:
+                pygame.draw.rect(self.screen, color, obstacle.rect, 2)
+            for dj in self.powerup_manager._double_jump._instances:
                 pygame.draw.rect(self.screen, (0, 255, 0), dj, 2)
-            for s in self.powerup_manager.shields:
+            for s in self.powerup_manager._shield._instances:
                 pygame.draw.rect(self.screen, (0, 0, 255), s, 2)
-            for m in self.powerup_manager.multipliers:
+            for m in self.powerup_manager._multiplier._instances:
                 pygame.draw.rect(self.screen, (255, 165, 0), m, 2)
     
     def run(self):
