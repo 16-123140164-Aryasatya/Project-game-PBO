@@ -44,4 +44,5 @@ Game ini dibuat menggunakan bahasa pemrograman Python dengan library **Pygame**,
 - Git & GitHub
 
 ```markdown
-![UML Diagram](Project Game PBO/assets/UML.png)
+![Diagram UML](https://raw.githubusercontent.com/16-123140164-Aryasatya/Project-game-PBO/main/Project%20Game%20PBO/assets/UML.png)
+
