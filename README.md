@@ -43,6 +43,10 @@ https://youtu.be/-tFqmv6s_Fo
 - Visual Studio Code / Editor pilihan  
 - Git & GitHub
 
-```markdown
+## Diagram UML
+
+Berikut adalah diagram UML dari sistem game Runner Saga:
+
 ![Diagram UML](https://raw.githubusercontent.com/16-123140164-Aryasatya/Project-game-PBO/main/Project%20Game%20PBO/assets/UML.png)
+
 
