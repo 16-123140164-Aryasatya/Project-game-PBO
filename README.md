@@ -43,7 +43,5 @@ Game ini dibuat menggunakan bahasa pemrograman Python dengan library **Pygame**,
 - Visual Studio Code / Editor pilihan  
 - Git & GitHub
 
-Untuk menambahkan diagram UML ke dalam README, simpan file diagram Anda ke dalam folder project (misalnya `assets/uml.png`) lalu tambahkan baris berikut:
-
 ```markdown
-![UML Diagram](./assets/uml.png)
+![UML Diagram](./assets/UML.png)
