@@ -8,8 +8,8 @@ Game ini dibuat menggunakan bahasa pemrograman Python dengan library **Pygame**,
 
 ---
 
-## Deskripsi Game
-
+## Dokumentasi Game
+https://youtu.be/-tFqmv6s_Fo
 
 
 ---
